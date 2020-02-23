@@ -5,7 +5,7 @@
 fully automatic script to install Ubuntu 18 LTS with ZFS root on Hetzner VPS
 WARNING: all data on the disk will be destroyed
 How to use: add SSH key to the rescue console, set it OS to linux64, then press mount rescue and power sysle
-Next, connect via SSH to console, and run the script 
+Next, connect via SSH to console, and run the script
 Answer script questions about desired hostname and ZFS ARC cache size
 To cope with network failures its higly recommended to run the script inside screen console
 screen -dmS zfs
@@ -19,10 +19,10 @@ set -o nounset
 
 # Variables
 v_bpool_name=
-v_bpool_tweaks=              
+v_bpool_tweaks=
 v_rpool_name=
-v_rpool_tweaks=              
-declare -a v_selected_disks  
+v_rpool_tweaks=
+declare -a v_selected_disks
 v_swap_size=                 # integer
 v_free_tail_space=           # integer
 v_hostname=
@@ -126,9 +126,9 @@ function check_prerequisites {
     echo "SSH pubkey file is absent, please add it to the rescue system setting, then reboot into rescue system and run the script"
     exit 1
   fi
-  if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep "install ok installed" &> /dev/null; then  
+  if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep "install ok installed" &> /dev/null; then
     apt install --yes dialog
-  fi  
+  fi
 }
 
 
@@ -138,7 +138,7 @@ function find_suitable_disks {
 
   udevadm trigger
 
-  # shellcheck disable=SC2012 
+  # shellcheck disable=SC2012
   ls -l /dev/disk/by-id | tail -n +2 | perl -lane 'print "@F[8..10]"' > "$c_disks_log"
 
   local candidate_disk_ids
@@ -395,10 +395,10 @@ function unmount_and_export_fs {
       zpools_exported=1
       echo "all zfs pools were succesfully exported"
       break;
-    else  
+    else
       sleep 1
-     fi  
-  done 
+     fi
+  done
   set -e
   if (( zpools_exported != 1 )); then
     echo "failed to export zfs pools"
@@ -437,12 +437,12 @@ ask_root_password
 
 ask_hostname
 
-clear 
+clear
 
 echo "===========remove unused kernels in rescue system========="
-for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | cut -s -d "/" -f 4); do 
+for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | cut -s -d "/" -f 4); do
   apt purge --yes "linux-headers-$kver"
-  apt purge --yes "linux-image-$kver"  
+  apt purge --yes "linux-image-$kver"
 done
 
 echo "======= installing zfs on rescue system =========="
@@ -477,7 +477,7 @@ echo "======= create zfs pools and datasets =========="
   bpool_disks_partitions=()
 
   if [[ $v_encrypt_rpool == "1" ]]; then
-    encryption_options=(-O "encryption=on" -O "keylocation=prompt" -O "keyformat=passphrase")
+    encryption_options=(-O "encryption=aes-256-gcm" -O "keylocation=prompt" -O "keyformat=passphrase")
   fi
 
   for selected_disk in "${v_selected_disks[@]}"; do
@@ -489,7 +489,7 @@ echo "======= create zfs pools and datasets =========="
     pools_mirror_option=mirror
   else
     pools_mirror_option=
-  fi                           
+  fi
 
 zpool create \
   $v_bpool_tweaks -O canmount=off -O devices=off \
@@ -539,12 +539,12 @@ if [[ $v_swap_size -gt 0 ]]; then
     "$v_rpool_name/swap"
 
   udevadm settle
- 
+
   mkswap -f "/dev/zvol/$v_rpool_name/swap"
 fi
 
 echo "======= setting up initial system packages =========="
-debootstrap --arch=amd64 bionic "$c_zfs_mount_dir" "$c_deb_packages_repo" 
+debootstrap --arch=amd64 bionic "$c_zfs_mount_dir" "$c_deb_packages_repo"
 
 zfs set devices=off "$v_rpool_name"
 
