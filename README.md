@@ -1,10 +1,14 @@
 # zfs-hetzner-vm
 
-Fully automatic, unattended script to install Debian 10 or Ubuntu 18 with ZFS root on Hetzner VPS.
+Scripts to install Debian 10 or Ubuntu 18 with ZFS root on Hetzner VPS.<br/>
 __WARNING:__ all data on the disk will be destroyed.
 
-How to use: add SSH key to the rescue console, set it OS to linux64, then press mount rescue and power cycle
-Next, connect via SSH to rescue console, and run the script from this repo.
+## How to use:
+
+* Login into Hetzner cloud server console.
+* Choose "rescue" menu.
+* Click "enable rescue and power cycle",  add SSH key to the rescue console, set it OS to linux64, then press mount rescue and power cycle" button.
+* connect via SSH to rescue console, and run the script from this repo.
 
 Debian 10 minimal setup with SSH server
 
