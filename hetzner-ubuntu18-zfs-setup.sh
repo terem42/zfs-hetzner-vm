@@ -26,6 +26,7 @@ declare -a v_selected_disks
 v_swap_size=                 # integer
 v_free_tail_space=           # integer
 v_hostname=
+v_kernel_variant=
 v_zfs_arc_max_mb=
 v_root_password=
 v_encrypt_rpool=             # 0=false, 1=true
@@ -352,6 +353,12 @@ function ask_hostname {
   print_variables v_hostname
 }
 
+function determine_kernel_variant {
+  if dmidecode | grep vServer 2>&1; then
+    v_kernel_variant="-virtual"
+  fi
+}
+
 function chroot_execute {
   chroot $c_zfs_mount_dir bash -c "$1"
 }
@@ -658,7 +665,7 @@ chroot_execute "rm -f /etc/localtime /etc/timezone"
 chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
 
 echo "======= installing latest kernel============="
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers-virtual-hwe-18.04 linux-image-virtual-hwe-18.04 linux-image-extra-virtual-hwe-18.04"
+chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers${v_kernel_variant}-hwe-18.04 linux-image${v_kernel_variant}-hwe-18.04 linux-image-extra${v_kernel_variant}-hwe-18.04"
 
 echo "======= installing aux packages =========="
 chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"
