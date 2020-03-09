@@ -567,18 +567,18 @@ CONF
 
 ip6addr_prefix=$(ip -6 a s | grep -E "inet6.+global" | sed -nE 's/.+inet6\s(([0-9a-z]{1,4}:){4,4}).+/\1/p')
 
-cat > "$c_zfs_mount_dir/etc/netplan/01-netcfg.yaml" <<CONF
-network:
-  version: 2
-  renderer: networkd
-  ethernets:
-    ens3:
-      dhcp4: yes
-      dhcp6: no
-      addresses:
-        - ${ip6addr_prefix}:1/64
-      gateway6: fe80::1
+cat <<CONF > /mnt/etc/systemd/network/10-eth0.network
+[Match]
+Name=eth0
+
+[Network]
+DHCP=ipv4
+Address=${ip6addr_prefix}:1/64
+Gateway=fe80::1
 CONF
+
+chroot_execute "systemctl enable systemd-networkd.service"
+
 
 mkdir -p "$c_zfs_mount_dir/etc/cloud/cloud.cfg.d/"
 cat > "$c_zfs_mount_dir/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" <<CONF
@@ -722,7 +722,8 @@ chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
 chroot_execute "grub-install ${v_selected_disks[0]}"
 
 chroot_execute "sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/g' /etc/default/grub"
-chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"root=ZFS=rpool/ROOT/ubuntu\"|g'  /etc/default/grub"
+chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"net.ifnames=0\"|' /etc/default/grub"
+chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"root=ZFS=rpool/ROOT/ubuntu\"|g' /etc/default/grub"
 
 chroot_execute "sed -i 's/quiet//g' /etc/default/grub"
 chroot_execute "sed -i 's/splash//g' /etc/default/grub"
