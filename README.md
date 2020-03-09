@@ -1,6 +1,6 @@
 # zfs-hetzner-vm
 
-Scripts to install Debian 10 or Ubuntu 18 with ZFS root on Hetzner VPS.<br/>
+Scripts to install Debian 10 or Ubuntu 18 with ZFS root on Hetzner root servers (virtual and dedicated).<br/>
 __WARNING:__ all data on the disk will be destroyed.
 
 ## How to use:
