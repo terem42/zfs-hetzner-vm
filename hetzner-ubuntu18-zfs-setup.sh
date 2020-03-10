@@ -127,7 +127,7 @@ function check_prerequisites {
     echo "SSH pubkey file is absent, please add it to the rescue system setting, then reboot into rescue system and run the script"
     exit 1
   fi
-  if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep "install ok installed" &> /dev/null; then
+  if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep -q "install ok installed"; then
     apt install --yes dialog
   fi
 }
@@ -354,7 +354,7 @@ function ask_hostname {
 }
 
 function determine_kernel_variant {
-  if dmidecode | grep vServer 2>&1; then
+  if dmidecode | grep -q vServer; then
     v_kernel_variant="-virtual"
   fi
 }
