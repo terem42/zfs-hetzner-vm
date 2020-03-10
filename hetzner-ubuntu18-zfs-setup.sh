@@ -356,6 +356,8 @@ function ask_hostname {
 function determine_kernel_variant {
   if dmidecode | grep -q vServer; then
     v_kernel_variant="-virtual"
+  else
+    v_kernel_variant="-generic"
   fi
 }
 
@@ -443,6 +445,8 @@ ask_zfs_experimental
 ask_root_password
 
 ask_hostname
+
+determine_kernel_variant
 
 clear
 
@@ -665,7 +669,12 @@ chroot_execute "rm -f /etc/localtime /etc/timezone"
 chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
 
 echo "======= installing latest kernel============="
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers${v_kernel_variant}-hwe-18.04 linux-image${v_kernel_variant}-hwe-18.04 linux-image-extra${v_kernel_variant}-hwe-18.04"
+chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers${v_kernel_variant}-hwe-18.04 linux-image${v_kernel_variant}-hwe-18.04"
+if [[ $v_kernel_variant == "-virtual" ]]; then
+  # linux-image-extra is only available for virtual hosts
+  chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-image-extra-virtual-hwe-18.04"
+fi
+
 
 echo "======= installing aux packages =========="
 chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"

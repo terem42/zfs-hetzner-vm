@@ -479,6 +479,8 @@ ask_root_password
 
 ask_hostname
 
+determine_kernel_variant
+
 clear
 
 echo "===========remove unused kernels in rescue system========="
