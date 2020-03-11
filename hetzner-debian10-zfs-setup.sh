@@ -127,7 +127,7 @@ function check_prerequisites {
     echo "SSH pubkey file is absent, please add it to the rescue system setting, then reboot into rescue system and run the script"
     exit 1
   fi
-  if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep "install ok installed" &> /dev/null; then
+  if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep -q "install ok installed"; then
     apt install --yes dialog
   fi
 }
@@ -389,7 +389,7 @@ function ask_hostname {
 }
 
 function determine_kernel_variant {
-  if dmidecode | grep vServer 2>&1; then
+  if dmidecode | grep -q vServer; then
     v_kernel_variant="-cloud"
   fi
 }
@@ -479,6 +479,8 @@ ask_root_password
 
 ask_hostname
 
+determine_kernel_variant
+
 clear
 
 echo "===========remove unused kernels in rescue system========="
@@ -547,8 +549,8 @@ echo -n "$v_passphrase" | zpool create \
 zfs create -o canmount=off -o mountpoint=none "$v_rpool_name/ROOT"
 zfs create -o canmount=off -o mountpoint=none "$v_bpool_name/BOOT"
 
-zfs create -o canmount=noauto -o mountpoint=/ "$v_rpool_name/ROOT/ubuntu"
-zfs mount "$v_rpool_name/ROOT/ubuntu"
+zfs create -o canmount=noauto -o mountpoint=/ "$v_rpool_name/ROOT/debian"
+zfs mount "$v_rpool_name/ROOT/debian"
 
 zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/ubuntu"
 zfs mount "$v_bpool_name/BOOT/ubuntu"
@@ -754,7 +756,7 @@ chroot_execute "grub-install ${v_selected_disks[0]}"
 
 chroot_execute "sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/g' /etc/default/grub"
 chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"net.ifnames=0\"|' /etc/default/grub"
-chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"root=ZFS=rpool/ROOT/ubuntu\"|g' /etc/default/grub"
+chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"root=ZFS=rpool/ROOT/debian\"|g' /etc/default/grub"
 
 chroot_execute "sed -i 's/quiet//g' /etc/default/grub"
 chroot_execute "sed -i 's/splash//g' /etc/default/grub"
