@@ -490,6 +490,15 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs on rescue system =========="
+cat > "/etc/apt/sources.list" <<CONF
+deb [arch=i386,amd64] $c_deb_packages_repo buster main contrib non-free
+deb [arch=i386,amd64] $c_deb_packages_repo buster-updates main contrib non-free
+deb [arch=i386,amd64] $c_deb_packages_repo buster-backports main contrib non-free
+deb [arch=i386,amd64] $c_deb_security_repo buster/updates main contrib non-free
+CONF
+
+apt update
+
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
 
   apt update
