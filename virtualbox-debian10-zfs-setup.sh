@@ -618,7 +618,7 @@ ff02::2 ip6-allrouters
 ff02::3 ip6-allhosts
 CONF
 
-ip6addr_prefix=$(ip -6 a s | grep -E "inet6.+global" | sed -nE 's/.+inet6\s(([0-9a-z]{1,4}:){4,4}).+/\1/p')
+#ip6addr_prefix=$(ip -6 a s | grep -E "inet6.+global" | sed -nE 's/.+inet6\s(([0-9a-z]{1,4}:){4,4}).+/\1/p')
 
 cat <<CONF > /mnt/etc/systemd/network/10-eth0.network
 [Match]
@@ -626,9 +626,11 @@ Name=eth0
 
 [Network]
 DHCP=ipv4
-Address=${ip6addr_prefix}:1/64
-Gateway=fe80::1
 CONF
+
+#Address=${ip6addr_prefix}:1/64
+#Gateway=fe80::1
+
 chroot_execute "systemctl enable systemd-networkd.service"
 
 
