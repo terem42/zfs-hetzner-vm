@@ -123,10 +123,10 @@ function check_prerequisites {
     echo 'This script must be run with administrative privileges!'
     exit 1
   fi
-  if [[ ! -r /root/.ssh/authorized_keys ]]; then
-    echo "SSH pubkey file is absent, please add it to the rescue system setting, then reboot into rescue system and run the script"
-    exit 1
-  fi
+#  if [[ ! -r /root/.ssh/authorized_keys ]]; then
+#    echo "SSH pubkey file is absent, please add it to the rescue system setting, then reboot into rescue system and run the script"
+#    exit 1
+#  fi
   if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep -q "install ok installed"; then
     apt install --yes dialog
   fi
