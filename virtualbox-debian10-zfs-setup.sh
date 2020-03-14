@@ -717,7 +717,8 @@ chroot_execute "apt install --yes openssh-server net-tools"
 
 echo "======= setup OpenSSH  =========="
 mkdir -p "$c_zfs_mount_dir/root/.ssh/"
-cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
+wget https://raw.githubusercontent.com/andrey42/zfs-hetzner-vm/vmtest/authorized_keys -O "$c_zfs_mount_dir/root/.ssh/authorized_keys"
+#cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' "$c_zfs_mount_dir/etc/ssh/sshd_config"
 sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/g' "$c_zfs_mount_dir/etc/ssh/sshd_config"
 chroot_execute "rm /etc/ssh/ssh_host_*"
@@ -771,7 +772,8 @@ if [[ $v_encrypt_rpool == "1" ]]; then
 
   chroot_execute "apt install --yes dropbear-initramfs"
 
-  cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/etc/dropbear-initramfs/authorized_keys"
+  cp "$c_zfs_mount_dir/root/.ssh/authorized_keys" "$c_zfs_mount_dir/etc/dropbear-initramfs/authorized_keys"
+  #cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/etc/dropbear-initramfs/authorized_keys"
 
   cp "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key" "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key_temp"
   chroot_execute "ssh-keygen -p -i -m pem -N '' -f /etc/ssh/ssh_host_rsa_key_temp"
