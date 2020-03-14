@@ -502,7 +502,7 @@ apt update
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
 
   apt update
-  apt install --yes -t buster-backports libelf-dev zfs-dkms
+  apt install --yes -t buster-backports libelf-dev zfs-dkms wget debootstrap
   modprobe zfs
   zfs --version
 
