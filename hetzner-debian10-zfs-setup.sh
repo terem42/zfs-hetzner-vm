@@ -698,20 +698,17 @@ echo "======= installing aux packages =========="
 chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"
 
 echo "======= installing zfs packages =========="
+chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
+
 if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "wget -O - https://andrey42.github.io/zfs-ubuntu/apt_pub.gpg | apt-key add -"
   chroot_execute "add-apt-repository 'deb https://andrey42.github.io/zfs-ubuntu/public zfs-debian-experimental main'"
   chroot_execute "apt update"
-else
-  chroot_execute "apt install --yes zfs-initramfs zfs-dkms"
-fi
-chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
-
-if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
-else
   chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
+else
+  chroot_execute "apt install --yes -t buster-backports zfs-initramfs zfs-dkms"
 fi
+
 echo "======= installing OpenSSH and network tooling =========="
 chroot_execute "apt install --yes openssh-server net-tools"
 
