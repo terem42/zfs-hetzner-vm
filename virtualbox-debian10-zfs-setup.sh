@@ -710,8 +710,8 @@ chroot_execute "apt install --yes man wget curl software-properties-common nano 
 
 echo "======= installing zfs packages =========="
 if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "wget -O - https://andrey42.github.io/zfs-ubuntu/apt_pub.gpg | apt-key add -"
-  chroot_execute "add-apt-repository 'deb https://andrey42.github.io/zfs-ubuntu/public zfs-debian-experimental main'"
+  chroot_execute "wget -O - https://andrey42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
+  chroot_execute "add-apt-repository 'deb https://andrey42.github.io/zfs-debian/public zfs-debian-experimental main'"
   chroot_execute "apt update"
 else
   chroot_execute "apt install --yes zfs-initramfs zfs-dkms"
