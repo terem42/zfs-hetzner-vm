@@ -701,8 +701,8 @@ echo "======= installing zfs packages =========="
 chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
 
 if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "wget -O - https://andrey42.github.io/zfs-ubuntu/apt_pub.gpg | apt-key add -"
-  chroot_execute "add-apt-repository 'deb https://andrey42.github.io/zfs-ubuntu/public zfs-debian-experimental main'"
+  chroot_execute "wget -O - https://andrey42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
+  chroot_execute "add-apt-repository 'deb https://andrey42.github.io/zfs-debian/public zfs-debian-experimental main'"
   chroot_execute "apt update"
   chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
 else
