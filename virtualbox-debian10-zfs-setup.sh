@@ -718,9 +718,9 @@ fi
 chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
 
 if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
+  chroot_execute "apt install --yes -t zfs-debian-experimental zfs-initramfs zfs-dkms zfsutils-linux"
 else
-  chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
+  chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
 echo "======= installing OpenSSH and network tooling =========="
 chroot_execute "apt install --yes openssh-server net-tools"
