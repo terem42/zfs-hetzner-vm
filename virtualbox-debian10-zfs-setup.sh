@@ -652,7 +652,7 @@ CONF
 chroot_execute "apt update"
 
 echo "======= setting locale, console and language =========="
-chroot_execute "apt install --yes -qq locales debconf-i18n apt-utils"
+chroot_execute "apt install --yes -qq locales debconf-i18n apt-utils keyboard-configuration console-setup"
 sed -i 's/# en_US.UTF-8/en_US.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
 sed -i 's/# fr_FR.UTF-8/fr_FR.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
 sed -i 's/# fr_FR.UTF-8/fr_FR.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
@@ -694,7 +694,6 @@ CONF'
 
 chroot_execute "dpkg-reconfigure locales -f noninteractive"
 echo -e "LC_ALL=en_US.UTF-8\nLANG=en_US.UTF-8\n" >> "$c_zfs_mount_dir/etc/environment"
-chroot_execute "apt install -qq --yes keyboard-configuration console-setup"
 chroot_execute "dpkg-reconfigure keyboard-configuration -f noninteractive"
 chroot_execute "dpkg-reconfigure console-setup -f noninteractive"
 chroot_execute "setupcon"
