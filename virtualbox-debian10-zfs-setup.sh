@@ -208,7 +208,7 @@ LOG
   if [[ ${#v_suitable_disks[@]} -eq 0 ]]; then
     local dialog_message='No suitable disks have been found!
 
-If you think this is a bug, please open an issue on https://github.com/andrey42/zfs-hetzner-vm/issues, and attach the file `'"$c_disks_log"'`.
+If you think this is a bug, please open an issue on https://github.com/terem42/zfs-hetzner-vm/issues, and attach the file `'"$c_disks_log"'`.
 '
     dialog --ascii-lines --msgbox "$dialog_message" 30 100
 
@@ -710,8 +710,8 @@ chroot_execute "apt install --yes man wget curl software-properties-common nano 
 
 echo "======= installing zfs packages =========="
 if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "wget -O - https://andrey42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
-  chroot_execute "add-apt-repository 'deb https://andrey42.github.io/zfs-debian/public zfs-debian-experimental main'"
+  chroot_execute "wget -O - https://terem42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
+  chroot_execute "add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'"
   chroot_execute "apt update"
 else
   chroot_execute "apt install --yes zfs-initramfs zfs-dkms"
@@ -728,7 +728,7 @@ chroot_execute "apt install --yes openssh-server net-tools"
 
 echo "======= setup OpenSSH  =========="
 mkdir -p "$c_zfs_mount_dir/root/.ssh/"
-wget https://raw.githubusercontent.com/andrey42/zfs-hetzner-vm/vmtest/authorized_keys -O "$c_zfs_mount_dir/root/.ssh/authorized_keys"
+wget https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/vmtest/authorized_keys -O "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 #cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' "$c_zfs_mount_dir/etc/ssh/sshd_config"
 sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/g' "$c_zfs_mount_dir/etc/ssh/sshd_config"
