@@ -13,13 +13,13 @@ __WARNING:__ all data on the disk will be destroyed.
 Debian 10 minimal setup with SSH server
 
 ````
-wget -qO- https://raw.githubusercontent.com/andrey42/zfs-hetzner-vm/master/hetzner-debian10-zfs-setup.sh | bash -
+wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-debian10-zfs-setup.sh | bash -
 ````
 
 Ubuntu 18.04 LTS minimal setup with SSH server
 
 ````
-wget -qO- https://raw.githubusercontent.com/andrey42/zfs-hetzner-vm/master/hetzner-ubuntu18-zfs-setup.sh | bash -
+wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-ubuntu18-zfs-setup.sh | bash -
 ````
 
 Answer script questions about desired hostname and ZFS ARC cache size.
