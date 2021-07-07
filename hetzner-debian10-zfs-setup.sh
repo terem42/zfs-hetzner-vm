@@ -552,8 +552,8 @@ zfs create -o canmount=off -o mountpoint=none "$v_bpool_name/BOOT"
 zfs create -o canmount=noauto -o mountpoint=/ "$v_rpool_name/ROOT/debian"
 zfs mount "$v_rpool_name/ROOT/debian"
 
-zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/ubuntu"
-zfs mount "$v_bpool_name/BOOT/ubuntu"
+zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/debian"
+zfs mount "$v_bpool_name/BOOT/debian"
 
 zfs create                                 "$v_rpool_name/home"
 zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
@@ -824,8 +824,8 @@ else
 fi
 
 echo "======= setting mountpoints =========="
-chroot_execute "zfs set mountpoint=legacy $v_bpool_name/BOOT/ubuntu"
-chroot_execute "echo $v_bpool_name/BOOT/ubuntu /boot zfs nodev,relatime,x-systemd.requires=zfs-import-bpool.service 0 0 > /etc/fstab"
+chroot_execute "zfs set mountpoint=legacy $v_bpool_name/BOOT/debian"
+chroot_execute "echo $v_bpool_name/BOOT/debian /boot zfs nodev,relatime,x-systemd.requires=zfs-import-bpool.service 0 0 > /etc/fstab"
 
 chroot_execute "zfs set mountpoint=legacy $v_rpool_name/var/log"
 chroot_execute "echo $v_rpool_name/var/log /var/log zfs nodev,relatime 0 0 >> /etc/fstab"
