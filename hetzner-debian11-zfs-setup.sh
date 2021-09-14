@@ -765,7 +765,7 @@ chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024))
 
 echo "======= setting up grub =========="
 chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub grub-pc"
+chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
 chroot_execute "grub-install ${v_selected_disks[0]}"
 
 chroot_execute "sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/g' /etc/default/grub"
