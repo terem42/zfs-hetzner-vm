@@ -497,7 +497,7 @@ echo "======= installing zfs on rescue system =========="
     add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'
     apt update
     apt install --yes libelf-dev
-    apt install -t zfs-debian-experimental --yes zfs-dkms
+    apt install -t zfs-debian-experimental --yes zfs-dkms zfsutils-linux
   else
     cd "$(mktemp -d)"
     wget "$(curl -Ls https://api.github.com/repos/openzfs/zfs/releases/latest| grep "browser_download_url.*tar.gz"|grep -E "tar.gz\"$"| cut -d '"' -f 4)"
