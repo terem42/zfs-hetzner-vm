@@ -34,12 +34,6 @@ Ubuntu 18.04 LTS minimal setup with SSH server
 wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-ubuntu18-zfs-setup.sh | bash -
 ````
 
-Ubuntu 20 LTS minimal setup with SSH server
-
-````bash
-wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-ubuntu20-zfs-setup.sh | bash -
-````
-
 Answer script questions about desired hostname and ZFS ARC cache size.
 
 To cope with network failures its higly recommended to run the commands above inside screen console, type `man screen` for more info.
