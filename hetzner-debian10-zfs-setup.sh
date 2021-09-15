@@ -450,6 +450,7 @@ function unmount_and_export_fs {
 
 #################### MAIN ################################
 export LC_ALL=en_US.UTF-8
+export NCURSES_NO_UTF8_ACS=1
 
 check_prerequisites
 
@@ -491,10 +492,19 @@ done
 
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-
+  cd "$(mktemp -d)"
+  wget "$(curl -Ls https://api.github.com/repos/openzfs/zfs/releases/latest| grep "browser_download_url.*tar.gz"|grep -E "tar.gz\"$"| cut -d '"' -f 4)"
   apt update
-  apt install --yes -t buster-backports libelf-dev zfs-dkms
+  apt install libssl-dev uuid-dev zlib1g-dev libblkid-dev -y
+  tar xfv zfs*.tar.gz
+  rm *.tar.gz
+  cd zfs*
+  ./configure
+  make -j "$(nproc)"
+  make install
+  ldconfig
   modprobe zfs
+
   zfs --version
 
 echo "======= partitioning the disk =========="
@@ -784,18 +794,6 @@ if [[ $v_encrypt_rpool == "1" ]]; then
   rm -rf "$c_zfs_mount_dir/etc/dropbear-initramfs/dropbear_dss_host_key"
 fi 
 
-#cd "$c_zfs_mount_dir/root"
-#wget http://ftp.de.debian.org/debian/pool/main/libt/libtommath/libtommath1_1.1.0-3_amd64.deb
-#wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-bin_2018.76-5_amd64.deb
-#wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-initramfs_2018.76-5_all.deb
-
-#chroot_execute "dpkg -i /root/libtommath1_1.1.0-3_amd64.deb"
-#chroot_execute "dpkg -i /root/dropbear-bin_2018.76-5_amd64.deb"
-#chroot_execute "dpkg -i /root/dropbear-initramfs_2018.76-5_all.deb"
-
-#rm $c_zfs_mount_dir/root/*.deb
-#cd /root
-
 echo "============setup root prompt============"
 cat > "$c_zfs_mount_dir/root/.bashrc" <<CONF
 export PS1='\[\033[01;31m\]\u\[\033[01;33m\]@\[\033[01;32m\]\h \[\033[01;33m\]\w \[\033[01;35m\]\$ \[\033[00m\]'
@@ -807,8 +805,31 @@ CONF
 echo "========running packages upgrade==========="
 chroot_execute "apt upgrade --yes"
 
-#echo "===========add static route to initramfs via hook to add default routes due to  initramfs DHCP bug ========="
-# removed
+echo "===========add static route to initramfs via hook to add default routes for Hetzner due to Debian/Ubuntu initramfs DHCP bug ========="
+mkdir -p "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount"
+cat > "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount/static-route" <<'CONF'
+#!/bin/sh
+PREREQ=""
+prereqs()
+{
+    echo "$PREREQ"
+}
+
+case $1 in
+prereqs)
+    prereqs
+    exit 0
+    ;;
+esac
+
+. /scripts/functions
+# Begin real processing below this line
+
+configure_networking
+
+ip route add 172.31.1.1/255.255.255.255 dev ens3
+ip route add default via 172.31.1.1 dev ens3
+CONF
 
 echo "======= update initramfs =========="
 chroot_execute "update-initramfs -u -k all"
