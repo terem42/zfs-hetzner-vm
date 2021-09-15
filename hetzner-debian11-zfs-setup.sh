@@ -491,28 +491,18 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs on rescue system =========="
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-  if [[ $v_zfs_experimental == "1" ]]; then
-    apt install --yes man wget curl software-properties-common nano htop gnupg
-    wget -O - https://terem42.github.io/zfs-debian/apt_pub.gpg | apt-key add -
-    add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'
-    apt update
-    apt install --yes libelf-dev
-    apt install -t zfs-debian-experimental --yes zfs-dkms zfsutils-linux
-  else
-    cd "$(mktemp -d)"
-    wget "$(curl -Ls https://api.github.com/repos/openzfs/zfs/releases/latest| grep "browser_download_url.*tar.gz"|grep -E "tar.gz\"$"| cut -d '"' -f 4)"
-    apt update
-    apt install libssl-dev uuid-dev zlib1g-dev libblkid-dev -y
-    tar xfv zfs*.tar.gz
-    rm *.tar.gz
-    cd zfs*
-    ./configure
-    make -j "$(nproc)"
-    make install
-    ldconfig
-    modprobe zfs
-  fi
+  cd "$(mktemp -d)"
+  wget "$(curl -Ls https://api.github.com/repos/openzfs/zfs/releases/latest| grep "browser_download_url.*tar.gz"|grep -E "tar.gz\"$"| cut -d '"' -f 4)"
+  apt update
+  apt install libssl-dev uuid-dev zlib1g-dev libblkid-dev -y
+  tar xfv zfs*.tar.gz
+  rm *.tar.gz
+  cd zfs*
+  ./configure
+  make -j "$(nproc)"
+  make install
+  ldconfig
+  modprobe zfs  
   zfs --version
 
 echo "======= partitioning the disk =========="
