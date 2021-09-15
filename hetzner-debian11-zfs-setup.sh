@@ -4,9 +4,9 @@
 (c) Andrey Prokopenko job@terem.fr
 fully automatic script to install Debian 11 with ZFS root on Hetzner VPS
 WARNING: all data on the disk will be destroyed
-How to use: add SSH key to the rescue console, set it OS to linux64, then press mount rescue and power sysle
+How to use: add SSH key to the rescue console, set it OS to linux64, then press "mount rescue and power cycle" button
 Next, connect via SSH to console, and run the script
-Answer script questions about desired hostname and ZFS ARC cache size
+Answer script questions about desired hostname, ZFS ARC cache size et cetera
 To cope with network failures its higly recommended to run the script inside screen console
 screen -dmS zfs
 screen -r zfs
@@ -40,7 +40,7 @@ c_deb_security_repo=https://mirror.hetzner.com/debian/security
 
 c_default_zfs_arc_max_mb=250
 c_default_bpool_tweaks="-o ashift=12 -O compression=lz4"
-c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=lz4 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
+c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=zstd-9 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
 c_default_hostname=terem
 c_zfs_mount_dir=/mnt
 c_log_dir=$(dirname "$(mktemp)")/zfs-hetzner-vm
