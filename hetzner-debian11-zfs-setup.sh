@@ -4,9 +4,9 @@
 (c) Andrey Prokopenko job@terem.fr
 fully automatic script to install Debian 11 with ZFS root on Hetzner VPS
 WARNING: all data on the disk will be destroyed
-How to use: add SSH key to the rescue console, set it OS to linux64, then press mount rescue and power sysle
+How to use: add SSH key to the rescue console, set it OS to linux64, then press "mount rescue and power cycle" button
 Next, connect via SSH to console, and run the script
-Answer script questions about desired hostname and ZFS ARC cache size
+Answer script questions about desired hostname, ZFS ARC cache size et cetera
 To cope with network failures its higly recommended to run the script inside screen console
 screen -dmS zfs
 screen -r zfs
@@ -40,7 +40,7 @@ c_deb_security_repo=https://mirror.hetzner.com/debian/security
 
 c_default_zfs_arc_max_mb=250
 c_default_bpool_tweaks="-o ashift=12 -O compression=lz4"
-c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=lz4 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
+c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=zstd-9 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
 c_default_hostname=terem
 c_zfs_mount_dir=/mnt
 c_log_dir=$(dirname "$(mktemp)")/zfs-hetzner-vm
@@ -368,7 +368,7 @@ function ask_encryption {
 function ask_zfs_experimental {
   print_step_info_header
 
-  if dialog --ascii-lines --yesno 'Do you want to use experimental zfs module build?' 30 100; then
+  if dialog --defaultno --ascii-lines --yesno 'Do you want to use experimental zfs module build?' 30 100; then
     v_zfs_experimental=1
   fi
 }
@@ -497,10 +497,19 @@ echo "======= installing zfs on rescue system =========="
     add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'
     apt update
     apt install --yes libelf-dev
-    apt install -t zfs-debian-experimental --yes zfs-dkms
+    apt install -t zfs-debian-experimental --yes zfs-dkms zfsutils-linux
   else
+    cd "$(mktemp -d)"
+    wget "$(curl -Ls https://api.github.com/repos/openzfs/zfs/releases/latest| grep "browser_download_url.*tar.gz"|grep -E "tar.gz\"$"| cut -d '"' -f 4)"
     apt update
-    apt install --yes libelf-dev zfs-dkms
+    apt install libssl-dev uuid-dev zlib1g-dev libblkid-dev -y
+    tar xfv zfs*.tar.gz
+    rm *.tar.gz
+    cd zfs*
+    ./configure
+    make -j "$(nproc)"
+    make install
+    ldconfig
     modprobe zfs
   fi
   zfs --version
@@ -514,7 +523,7 @@ echo "======= partitioning the disk =========="
   fi
 
   for selected_disk in "${v_selected_disks[@]}"; do
-    wipefs --all "$selected_disk"
+    wipefs --all --force "$selected_disk"
     sgdisk -a1 -n1:24K:+1000K            -t1:EF02 "$selected_disk"
     sgdisk -n2:0:+512M                   -t2:BF01 "$selected_disk" # Boot pool
     sgdisk -n3:0:"$tail_space_parameter" -t3:BF01 "$selected_disk" # Root pool
@@ -756,8 +765,9 @@ chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024))
 
 echo "======= setting up grub =========="
 chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
+chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-legacy"
 chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
-chroot_execute "grub-install ${v_selected_disks[0]}"
+chroot_execute "grub-install --recheck ${v_selected_disks[0]}"
 
 chroot_execute "sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/g' /etc/default/grub"
 chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"net.ifnames=0\"|' /etc/default/grub"
@@ -792,18 +802,6 @@ if [[ $v_encrypt_rpool == "1" ]]; then
   rm -rf "$c_zfs_mount_dir/etc/dropbear-initramfs/dropbear_dss_host_key"
 fi
 
-#cd "$c_zfs_mount_dir/root"
-#wget http://ftp.de.debian.org/debian/pool/main/libt/libtommath/libtommath1_1.1.0-3_amd64.deb
-#wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-bin_2018.76-5_amd64.deb
-#wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-initramfs_2018.76-5_all.deb
-
-#chroot_execute "dpkg -i /root/libtommath1_1.1.0-3_amd64.deb"
-#chroot_execute "dpkg -i /root/dropbear-bin_2018.76-5_amd64.deb"
-#chroot_execute "dpkg -i /root/dropbear-initramfs_2018.76-5_all.deb"
-
-#rm $c_zfs_mount_dir/root/*.deb
-#cd /root
-
 echo "============setup root prompt============"
 cat > "$c_zfs_mount_dir/root/.bashrc" <<CONF
 export PS1='\[\033[01;31m\]\u\[\033[01;33m\]@\[\033[01;32m\]\h \[\033[01;33m\]\w \[\033[01;35m\]\$ \[\033[00m\]'
@@ -814,9 +812,6 @@ CONF
 
 echo "========running packages upgrade==========="
 chroot_execute "apt upgrade --yes"
-
-#echo "===========add static route to initramfs via hook to add default routes due to  initramfs DHCP bug ========="
-# removed
 
 echo "======= update initramfs =========="
 chroot_execute "update-initramfs -u -k all"
