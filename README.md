@@ -1,6 +1,6 @@
 # zfs-hetzner-vm
 
-Scripts to install Debian 11, 10 or Ubuntu 18 with ZFS root on Hetzner root servers (virtual and dedicated).<br/>
+Scripts to install Debian 11, 10 or Ubuntu 20, 18 with ZFS root on Hetzner root servers (virtual and dedicated).<br/>
 __WARNING:__ all data on the disk will be destroyed.
 
 ## How to use:
