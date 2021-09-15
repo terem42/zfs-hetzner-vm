@@ -491,15 +491,15 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs on rescue system =========="
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
+  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
   apt-get install --yes software-properties-common
-  apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 8CF63AD3F06FC659  
-  add-apt-repository 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu bionic main'
+  apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 8CF63AD3F06FC659
+  add-apt-repository 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
+  apt update
+  apt install --yes zfs-dkms zfsutils-linux
+  add-apt-repository -r 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
   apt update
   rm /usr/local/sbin/zfs
-  apt install --yes zfs-dkms zfsutils-linux
-  export PATH=/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin
-  
   zfs --version
 
 echo "======= partitioning the disk =========="
