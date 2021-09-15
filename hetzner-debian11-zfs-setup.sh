@@ -368,7 +368,7 @@ function ask_encryption {
 function ask_zfs_experimental {
   print_step_info_header
 
-  if dialog --ascii-lines --yesno 'Do you want to use experimental zfs module build?' 30 100; then
+  if dialog --ascii-lines --yesno --defaultno 'Do you want to use experimental zfs module build?' 30 100; then
     v_zfs_experimental=1
   fi
 }
