@@ -459,20 +459,14 @@ done
 
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-
-  cd "$(mktemp -d)"
-  wget "$(curl -Ls https://api.github.com/repos/openzfs/zfs/releases/latest| grep "browser_download_url.*tar.gz"|grep -E "tar.gz\"$"| cut -d '"' -f 4)"
+  apt-get install --yes software-properties-common
+  apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 8CF63AD3F06FC659
+  add-apt-repository 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
   apt update
-  apt install libssl-dev uuid-dev zlib1g-dev libblkid-dev -y
-  tar xfv zfs*.tar.gz
-  rm *.tar.gz
-  cd zfs*
-  ./configure
-  make -j "$(nproc)"
-  make install
-  ldconfig
-  modprobe zfs
-
+  apt install --yes zfs-dkms zfsutils-linux
+  add-apt-repository -r 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
+  apt update
+  find /usr/local/sbin/ -type l | xargs rm
   zfs --version
 
 echo "======= partitioning the disk =========="
