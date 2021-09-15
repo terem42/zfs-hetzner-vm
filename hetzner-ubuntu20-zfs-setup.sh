@@ -699,6 +699,7 @@ if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "apt update"
   chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
 else
+  chroot_execute "add-apt-repository --yes ppa:jonathonf/zfs"
   chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
 
