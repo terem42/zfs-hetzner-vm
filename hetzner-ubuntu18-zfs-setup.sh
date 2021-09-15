@@ -685,26 +685,22 @@ if [[ $v_kernel_variant == "-virtual" ]]; then
   chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-image-extra-virtual-hwe-18.04"
 fi
 
-
 echo "======= installing aux packages =========="
 chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"
 chroot_execute "systemctl disable thermald"
 
 echo "======= installing zfs packages =========="
+chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
+
 if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "wget -O - https://terem42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
   chroot_execute "add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'"
   chroot_execute "apt update"
-else
-  chroot_execute "add-apt-repository --yes ppa:jonathonf/zfs"
-fi
-chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
-
-if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
 else
   chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
+
 echo "======= installing OpenSSH and network tooling =========="
 chroot_execute "apt install --yes openssh-server net-tools"
 

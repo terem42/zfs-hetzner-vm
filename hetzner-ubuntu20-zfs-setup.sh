@@ -691,25 +691,17 @@ chroot_execute "apt install --yes man-db wget curl software-properties-common na
 chroot_execute "systemctl disable thermald"
 
 echo "======= installing zfs packages =========="
+chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
+
 if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "wget -O - https://terem42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
   chroot_execute "add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'"
   chroot_execute "apt update"
-else
-  echo "======= installing OpenZFS 2.0 stable package from Debian 10 backports zfs packages =========="
-  chroot_execute "apt-key adv --recv-key --keyserver keyserver.ubuntu.com 648ACFD622F3D138"
-  chroot_execute "sudo apt-key adv --recv-key --keyserver keyserver.ubuntu.com 0E98404D386FA1D9"
-  chroot_execute "add-apt-repository 'deb http://deb.debian.org/debian buster-backports main contrib non-free'"
-  chroot_execute "apt install -t buster-backports --yes zfs-dkms zfsutils-linux zfs-initramfs"
-  chroot_execute "add-apt-repository -r 'deb http://deb.debian.org/debian buster-backports main contrib non-free'"
-fi
-chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
-
-if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
 else
   chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
+
 echo "======= installing OpenSSH and network tooling =========="
 chroot_execute "apt install --yes openssh-server net-tools"
 
