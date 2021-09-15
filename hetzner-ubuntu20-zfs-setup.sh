@@ -2,11 +2,11 @@
 
 : <<'end_header_info'
 (c) Andrey Prokopenko job@terem.fr
-fully automatic script to install Debian 11 with ZFS root on Hetzner VPS
+fully automatic script to install Ubuntu 20 LTS with ZFS root on Hetzner VPS
 WARNING: all data on the disk will be destroyed
 How to use: add SSH key to the rescue console, set it OS to linux64, then press "mount rescue and power cycle" button
 Next, connect via SSH to console, and run the script
-Answer script questions about desired hostname, ZFS ARC cache size et cetera
+Answer script questions about desired hostname and ZFS ARC cache size
 To cope with network failures its higly recommended to run the script inside screen console
 screen -dmS zfs
 screen -r zfs
@@ -35,12 +35,12 @@ v_zfs_experimental=
 v_suitable_disks=()
 
 # Constants
-c_deb_packages_repo=https://mirror.hetzner.com/debian/packages
-c_deb_security_repo=https://mirror.hetzner.com/debian/security
+c_deb_packages_repo=http://mirror.hetzner.de/ubuntu/packages
+c_deb_security_repo=http://mirror.hetzner.de/ubuntu/security
 
 c_default_zfs_arc_max_mb=250
 c_default_bpool_tweaks="-o ashift=12 -O compression=lz4"
-c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=zstd-9 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
+c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=lz4 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
 c_default_hostname=terem
 c_zfs_mount_dir=/mnt
 c_log_dir=$(dirname "$(mktemp)")/zfs-hetzner-vm
@@ -102,7 +102,7 @@ function display_intro_banner {
   print_step_info_header
 
   local dialog_message='Hello!
-This script will prepare the ZFS pools, then install and configure minimal Debian 11 with ZFS root on Hetzner hosting VPS instance
+This script will prepare the ZFS pools, then install and configure minimal Ubuntu 20 LTS with ZFS root on Hetzner hosting VPS instance
 The script with minimal changes may be used on any other hosting provider  supporting KVM virtualization and offering Debian-based rescue system.
 In order to stop the procedure, hit Esc twice during dialogs (excluding yes/no ones), or Ctrl+C while any operation is running.
 '
@@ -132,41 +132,6 @@ function check_prerequisites {
   fi
 }
 
-function initial_load_debian_zed_cache {
-  chroot_execute "mkdir /etc/zfs/zfs-list.cache"
-  chroot_execute "touch /etc/zfs/zfs-list.cache/rpool"
-  chroot_execute "ln -sf /usr/lib/zfs-linux/zed.d/history_event-zfs-list-cacher.sh /etc/zfs/zed.d/"
-
-  chroot_execute "zed -F &"
-
-  local success=0
-
-  if [[ ! -e /mnt/etc/zfs/zfs-list.cache/rpool ]] || [[ -e /mnt/etc/zfs/zfs-list.cache/rpool && (( $(ls -l /mnt/etc/zfs/zfs-list.cache/rpool 2> /dev/null | cut -d ' ' -f 5) == 0 )) ]]; then
-    chroot_execute "zfs set canmount=noauto rpool"
-
-    SECONDS=0
-
-    while (( SECONDS++ <= 120 )); do
-      if [[ -e /mnt/etc/zfs/zfs-list.cache/rpool ]] && (( "$(ls -l /mnt/etc/zfs/zfs-list.cache/rpool | cut -d ' ' -f 5)" > 0 )); then
-        success=1
-        break
-      else
-        sleep 1
-      fi
-    done
-  else
-    success=1
-  fi
-
-  if (( success != 1 )); then
-    echo "Fatal zed daemon error: the ZFS cache hasn't been updated by ZED!"
-    exit 1
-  fi
-
-  chroot_execute "pkill zed"
-
-  sed -Ei 's|/mnt/?|/|g' /mnt/etc/zfs/zfs-list.cache/rpool
-}
 
 function find_suitable_disks {
   # shellcheck disable=SC2119
@@ -348,7 +313,7 @@ function ask_root_password {
 function ask_encryption {
   print_step_info_header
 
-  if dialog --defaultno --yesno 'Do you want to encrypt the root pool?' 30 100; then
+  if dialog --yesno 'Do you want to encrypt the root pool?' 30 100; then
     v_encrypt_rpool=1
   fi
   set +x
@@ -368,7 +333,7 @@ function ask_encryption {
 function ask_zfs_experimental {
   print_step_info_header
 
-  if dialog --defaultno --yesno 'Do you want to use experimental zfs module build?' 30 100; then
+  if dialog --yesno 'Do you want to use experimental zfs module build?' 30 100; then
     v_zfs_experimental=1
   fi
 }
@@ -390,7 +355,9 @@ function ask_hostname {
 
 function determine_kernel_variant {
   if dmidecode | grep -q vServer; then
-    v_kernel_variant="-cloud"
+    v_kernel_variant="-virtual"
+  else
+    v_kernel_variant="-generic"
   fi
 }
 
@@ -454,9 +421,9 @@ export NCURSES_NO_UTF8_ACS=1
 
 check_prerequisites
 
-activate_debug
-
 display_intro_banner
+
+activate_debug
 
 find_suitable_disks
 
@@ -492,27 +459,20 @@ done
 
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-  if [[ $v_zfs_experimental == "1" ]]; then
-    apt install --yes man wget curl software-properties-common nano htop gnupg
-    wget -O - https://terem42.github.io/zfs-debian/apt_pub.gpg | apt-key add -
-    add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'
-    apt update
-    apt install --yes libelf-dev
-    apt install -t zfs-debian-experimental --yes zfs-dkms zfsutils-linux
-  else
-    cd "$(mktemp -d)"
-    wget "$(curl -Ls https://api.github.com/repos/openzfs/zfs/releases/latest| grep "browser_download_url.*tar.gz"|grep -E "tar.gz\"$"| cut -d '"' -f 4)"
-    apt update
-    apt install libssl-dev uuid-dev zlib1g-dev libblkid-dev -y
-    tar xfv zfs*.tar.gz
-    rm *.tar.gz
-    cd zfs*
-    ./configure
-    make -j "$(nproc)"
-    make install
-    ldconfig
-    modprobe zfs
-  fi
+
+  cd "$(mktemp -d)"
+  wget "$(curl -Ls https://api.github.com/repos/openzfs/zfs/releases/latest| grep "browser_download_url.*tar.gz"|grep -E "tar.gz\"$"| cut -d '"' -f 4)"
+  apt update
+  apt install libssl-dev uuid-dev zlib1g-dev libblkid-dev -y
+  tar xfv zfs*.tar.gz
+  rm *.tar.gz
+  cd zfs*
+  ./configure
+  make -j "$(nproc)"
+  make install
+  ldconfig
+  modprobe zfs
+
   zfs --version
 
 echo "======= partitioning the disk =========="
@@ -567,11 +527,11 @@ echo -n "$v_passphrase" | zpool create \
 zfs create -o canmount=off -o mountpoint=none "$v_rpool_name/ROOT"
 zfs create -o canmount=off -o mountpoint=none "$v_bpool_name/BOOT"
 
-zfs create -o canmount=noauto -o mountpoint=/ "$v_rpool_name/ROOT/debian"
-zfs mount "$v_rpool_name/ROOT/debian"
+zfs create -o canmount=noauto -o mountpoint=/ "$v_rpool_name/ROOT/ubuntu"
+zfs mount "$v_rpool_name/ROOT/ubuntu"
 
-zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/debian"
-zfs mount "$v_bpool_name/BOOT/debian"
+zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/ubuntu"
+zfs mount "$v_bpool_name/BOOT/ubuntu"
 
 zfs create                                 "$v_rpool_name/home"
 zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
@@ -606,7 +566,7 @@ if [[ $v_swap_size -gt 0 ]]; then
 fi
 
 echo "======= setting up initial system packages =========="
-debootstrap --arch=amd64 bullseye "$c_zfs_mount_dir" "$c_deb_packages_repo"
+debootstrap --arch=amd64 focal "$c_zfs_mount_dir" "$c_deb_packages_repo"
 
 zfs set devices=off "$v_rpool_name"
 
@@ -638,8 +598,17 @@ DHCP=ipv4
 Address=${ip6addr_prefix}:1/64
 Gateway=fe80::1
 CONF
+
 chroot_execute "systemctl enable systemd-networkd.service"
 
+
+mkdir -p "$c_zfs_mount_dir/etc/cloud/cloud.cfg.d/"
+cat > "$c_zfs_mount_dir/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" <<CONF
+network:
+  config: disabled
+CONF
+
+rm -rf $c_zfs_mount_dir/etc/network/interfaces.d/50-cloud-init.cfg
 
 cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
 
@@ -650,16 +619,17 @@ done
 
 echo "======= setting apt repos =========="
 cat > "$c_zfs_mount_dir/etc/apt/sources.list" <<CONF
-deb $c_deb_packages_repo bullseye main contrib non-free
-deb $c_deb_packages_repo bullseye-updates main contrib non-free
-deb $c_deb_security_repo bullseye-security main contrib non-free
-deb $c_deb_packages_repo bullseye-backports main contrib non-free
+deb [arch=i386,amd64] $c_deb_packages_repo focal main restricted
+deb [arch=i386,amd64] $c_deb_packages_repo focal-updates main restricted
+deb [arch=i386,amd64] $c_deb_packages_repo focal-backports main restricted
+deb [arch=i386,amd64] $c_deb_packages_repo focal universe
+deb [arch=i386,amd64] $c_deb_security_repo focal-security main restricted
 CONF
 
 chroot_execute "apt update"
 
 echo "======= setting locale, console and language =========="
-chroot_execute "apt install --yes -qq locales debconf-i18n apt-utils"
+chroot_execute "apt install --yes -qq locales debconf-i18n apt-utils keyboard-configuration console-setup"
 sed -i 's/# en_US.UTF-8/en_US.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
 sed -i 's/# fr_FR.UTF-8/fr_FR.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
 sed -i 's/# fr_FR.UTF-8/fr_FR.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
@@ -701,7 +671,6 @@ CONF'
 
 chroot_execute "dpkg-reconfigure locales -f noninteractive"
 echo -e "LC_ALL=en_US.UTF-8\nLANG=en_US.UTF-8\n" >> "$c_zfs_mount_dir/etc/environment"
-chroot_execute "apt install -qq --yes keyboard-configuration console-setup"
 chroot_execute "dpkg-reconfigure keyboard-configuration -f noninteractive"
 chroot_execute "dpkg-reconfigure console-setup -f noninteractive"
 chroot_execute "setupcon"
@@ -710,23 +679,37 @@ chroot_execute "rm -f /etc/localtime /etc/timezone"
 chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
 
 echo "======= installing latest kernel============="
-chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64"
+chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers${v_kernel_variant}-hwe-18.04 linux-image${v_kernel_variant}-hwe-18.04"
+if [[ $v_kernel_variant == "-virtual" ]]; then
+  # linux-image-extra is only available for virtual hosts
+  chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-image-extra-virtual-hwe-20.04"
+fi
+
 
 echo "======= installing aux packages =========="
-chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"
+chroot_execute "apt install --yes man-db wget curl software-properties-common nano htop gnupg"
+chroot_execute "systemctl disable thermald"
 
 echo "======= installing zfs packages =========="
-chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
-
 if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "wget -O - https://terem42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
   chroot_execute "add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'"
   chroot_execute "apt update"
+else
+  echo "======= installing OpenZFS 2.0 stable package from Debian 10 backports zfs packages =========="
+  chroot_execute "apt-key adv --recv-key --keyserver keyserver.ubuntu.com 648ACFD622F3D138"
+  chroot_execute "sudo apt-key adv --recv-key --keyserver keyserver.ubuntu.com 0E98404D386FA1D9"
+  chroot_execute "add-apt-repository 'deb http://deb.debian.org/debian buster-backports main contrib non-free'"
+  chroot_execute "apt install -t buster-backports --yes zfs-dkms zfsutils-linux zfs-initramfs"
+  chroot_execute "add-apt-repository -r 'deb http://deb.debian.org/debian buster-backports main contrib non-free'"
+fi
+chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
+
+if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
 else
   chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
-
 echo "======= installing OpenSSH and network tooling =========="
 chroot_execute "apt install --yes openssh-server net-tools"
 
@@ -752,7 +735,7 @@ Before=zfs-import-cache.service
 Type=oneshot
 RemainAfterExit=yes
 ExecStartPre=/bin/sh -c '[ -f /etc/zfs/zpool.cache ] && mv /etc/zfs/zpool.cache /etc/zfs/preboot_zpool.cache || true'
-ExecStart=/sbin/zpool import -N -o cachefile=none -d /dev/disk/by-id $v_bpool_name
+ExecStart=/sbin/zpool import -N -o cachefile=none $v_bpool_name
 ExecStartPost=/bin/sh -c '[ -f /etc/zfs/preboot_zpool.cache ] && mv /etc/zfs/preboot_zpool.cache /etc/zfs/zpool.cache || true'
 
 [Install]
@@ -766,13 +749,12 @@ chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024))
 
 echo "======= setting up grub =========="
 chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-legacy"
 chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
-chroot_execute "grub-install --recheck ${v_selected_disks[0]}"
+chroot_execute "grub-install ${v_selected_disks[0]}"
 
 chroot_execute "sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/g' /etc/default/grub"
 chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"net.ifnames=0\"|' /etc/default/grub"
-chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"root=ZFS=rpool/ROOT/debian\"|g' /etc/default/grub"
+chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"root=ZFS=rpool/ROOT/ubuntu\"|g' /etc/default/grub"
 
 chroot_execute "sed -i 's/quiet//g' /etc/default/grub"
 chroot_execute "sed -i 's/splash//g' /etc/default/grub"
@@ -784,7 +766,6 @@ done
 
 if [[ $v_encrypt_rpool == "1" ]]; then
   echo "=========set up dropbear=============="
-
   chroot_execute "apt install --yes dropbear-initramfs"
 
   cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/etc/dropbear-initramfs/authorized_keys"
@@ -801,6 +782,18 @@ if [[ $v_encrypt_rpool == "1" ]]; then
   rm -rf "$c_zfs_mount_dir/etc/ssh/ssh_host_ecdsa_key_temp"
 
   rm -rf "$c_zfs_mount_dir/etc/dropbear-initramfs/dropbear_dss_host_key"
+
+  cd "$c_zfs_mount_dir/root"
+  wget http://ftp.de.debian.org/debian/pool/main/libt/libtommath/libtommath1_1.1.0-3_amd64.deb
+  wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-bin_2018.76-5_amd64.deb
+  wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-initramfs_2018.76-5_all.deb
+
+  chroot_execute "dpkg -i /root/libtommath1_1.1.0-3_amd64.deb"
+  chroot_execute "dpkg -i /root/dropbear-bin_2018.76-5_amd64.deb"
+  chroot_execute "dpkg -i /root/dropbear-initramfs_2018.76-5_all.deb"
+
+  rm $c_zfs_mount_dir/root/*.deb
+  cd /root
 fi
 
 echo "============setup root prompt============"
@@ -814,7 +807,7 @@ CONF
 echo "========running packages upgrade==========="
 chroot_execute "apt upgrade --yes"
 
-echo "===========add static route to initramfs via hook to add default routes for Hetzner due to Debian/Ubuntu initramfs DHCP bug ========="
+echo "===========add static route to initramfs via hook to add default routes due to Ubuntu initramfs DHCP bug ========="
 mkdir -p "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount"
 cat > "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount/static-route" <<'CONF'
 #!/bin/sh
@@ -849,15 +842,12 @@ echo "======= update grub =========="
 chroot_execute "update-grub"
 
 echo "======= setting up zed =========="
-if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "zfs set canmount=noauto rpool"
-else
-  initial_load_debian_zed_cache
-fi
+
+chroot_execute "zfs set canmount=noauto rpool"
 
 echo "======= setting mountpoints =========="
-chroot_execute "zfs set mountpoint=legacy $v_bpool_name/BOOT/debian"
-chroot_execute "echo $v_bpool_name/BOOT/debian /boot zfs nodev,relatime,x-systemd.requires=zfs-import-bpool.service 0 0 > /etc/fstab"
+chroot_execute "zfs set mountpoint=legacy $v_bpool_name/BOOT/ubuntu"
+chroot_execute "echo $v_bpool_name/BOOT/ubuntu /boot zfs nodev,relatime,x-systemd.requires=zfs-import-bpool.service 0 0 > /etc/fstab"
 
 chroot_execute "zfs set mountpoint=legacy $v_rpool_name/var/log"
 chroot_execute "echo $v_rpool_name/var/log /var/log zfs nodev,relatime 0 0 >> /etc/fstab"

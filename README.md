@@ -16,6 +16,12 @@ Debian 11 minimal setup with SSH server
 wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-debian11-zfs-setup.sh | bash -
 ````
 
+Ubuntu 20 LTS minimal setup with SSH server
+
+````bash
+wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-ubuntu20-zfs-setup.sh | bash -
+````
+
 Debian 10 minimal setup with SSH server
 
 ````bash
