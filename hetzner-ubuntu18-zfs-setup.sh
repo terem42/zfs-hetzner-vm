@@ -460,9 +460,19 @@ done
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
 
+  cd "$(mktemp -d)"
+  wget "$(curl -Ls https://api.github.com/repos/openzfs/zfs/releases/latest| grep "browser_download_url.*tar.gz"|grep -E "tar.gz\"$"| cut -d '"' -f 4)"
   apt update
-  apt install --yes -t buster-backports libelf-dev zfs-dkms
+  apt install libssl-dev uuid-dev zlib1g-dev libblkid-dev -y
+  tar xfv zfs*.tar.gz
+  rm *.tar.gz
+  cd zfs*
+  ./configure
+  make -j "$(nproc)"
+  make install
+  ldconfig
   modprobe zfs
+
   zfs --version
 
 echo "======= partitioning the disk =========="
