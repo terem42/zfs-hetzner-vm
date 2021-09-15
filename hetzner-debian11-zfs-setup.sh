@@ -765,7 +765,6 @@ chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024))
 
 echo "======= setting up grub =========="
 chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-legacy"
 chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
 chroot_execute "grub-install --recheck ${v_selected_disks[0]}"
 
@@ -802,18 +801,6 @@ if [[ $v_encrypt_rpool == "1" ]]; then
   rm -rf "$c_zfs_mount_dir/etc/dropbear-initramfs/dropbear_dss_host_key"
 fi
 
-#cd "$c_zfs_mount_dir/root"
-#wget http://ftp.de.debian.org/debian/pool/main/libt/libtommath/libtommath1_1.1.0-3_amd64.deb
-#wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-bin_2018.76-5_amd64.deb
-#wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-initramfs_2018.76-5_all.deb
-
-#chroot_execute "dpkg -i /root/libtommath1_1.1.0-3_amd64.deb"
-#chroot_execute "dpkg -i /root/dropbear-bin_2018.76-5_amd64.deb"
-#chroot_execute "dpkg -i /root/dropbear-initramfs_2018.76-5_all.deb"
-
-#rm $c_zfs_mount_dir/root/*.deb
-#cd /root
-
 echo "============setup root prompt============"
 cat > "$c_zfs_mount_dir/root/.bashrc" <<CONF
 export PS1='\[\033[01;31m\]\u\[\033[01;33m\]@\[\033[01;32m\]\h \[\033[01;33m\]\w \[\033[01;35m\]\$ \[\033[00m\]'
@@ -824,9 +811,6 @@ CONF
 
 echo "========running packages upgrade==========="
 chroot_execute "apt upgrade --yes"
-
-#echo "===========add static route to initramfs via hook to add default routes due to  initramfs DHCP bug ========="
-# removed
 
 echo "======= update initramfs =========="
 chroot_execute "update-initramfs -u -k all"
