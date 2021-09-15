@@ -106,7 +106,7 @@ This script will prepare the ZFS pools, then install and configure minimal Ubunt
 The script with minimal changes may be used on any other hosting provider  supporting KVM virtualization and offering Debian-based rescue system.
 In order to stop the procedure, hit Esc twice during dialogs (excluding yes/no ones), or Ctrl+C while any operation is running.
 '
-  dialog --ascii-lines --msgbox "$dialog_message" 30 100
+  dialog --msgbox "$dialog_message" 30 100
 }
 
 function store_os_distro_information {
@@ -175,7 +175,7 @@ LOG
 
 If you think this is a bug, please open an issue on https://github.com/terem42/zfs-hetzner-vm/issues, and attach the file `'"$c_disks_log"'`.
 '
-    dialog --ascii-lines --msgbox "$dialog_message" 30 100
+    dialog --msgbox "$dialog_message" 30 100
 
     exit 1
   fi
@@ -204,7 +204,7 @@ function select_disks {
 
 Devices with mounted partitions, cdroms, and removable devices are not displayed!
 "
-    mapfile -t v_selected_disks < <(dialog --ascii-lines --separate-output --checklist "$dialog_message" 30 100 $((${#menu_entries_option[@]} / 3)) "${menu_entries_option[@]}" 3>&1 1>&2 2>&3)
+    mapfile -t v_selected_disks < <(dialog --separate-output --checklist "$dialog_message" 30 100 $((${#menu_entries_option[@]} / 3)) "${menu_entries_option[@]}" 3>&1 1>&2 2>&3)
 
     if [[ ${#v_selected_disks[@]} -gt 0 ]]; then
       break
@@ -221,7 +221,7 @@ function ask_swap_size {
   local swap_size_invalid_message=
 
   while [[ ! $v_swap_size =~ ^[0-9]+$ ]]; do
-    v_swap_size=$(dialog --ascii-lines --inputbox "${swap_size_invalid_message}Enter the swap size in GiB (0 for no swap):" 30 100 2 3>&1 1>&2 2>&3)
+    v_swap_size=$(dialog --inputbox "${swap_size_invalid_message}Enter the swap size in GiB (0 for no swap):" 30 100 2 3>&1 1>&2 2>&3)
 
     swap_size_invalid_message="Invalid swap size! "
   done
@@ -236,7 +236,7 @@ function ask_free_tail_space {
   local tail_space_invalid_message=
 
   while [[ ! $v_free_tail_space =~ ^[0-9]+$ ]]; do
-    v_free_tail_space=$(dialog --ascii-lines --inputbox "${tail_space_invalid_message}Enter the space to leave at the end of each disk (0 for none):" 30 100 0 3>&1 1>&2 2>&3)
+    v_free_tail_space=$(dialog --inputbox "${tail_space_invalid_message}Enter the space to leave at the end of each disk (0 for none):" 30 100 0 3>&1 1>&2 2>&3)
 
     tail_space_invalid_message="Invalid size! "
   done
@@ -251,7 +251,7 @@ function ask_zfs_arc_max_size {
   local zfs_arc_max_invalid_message=
 
   while [[ ! $v_zfs_arc_max_mb =~ ^[0-9]+$ ]]; do
-    v_zfs_arc_max_mb=$(dialog --ascii-lines --inputbox "${zfs_arc_max_invalid_message}Enter ZFS ARC cache max size in Mb (minimum 64Mb, enter 0 for ZFS default value, the default will take up to 50% of memory):" 30 100 "$c_default_zfs_arc_max_mb" 3>&1 1>&2 2>&3)
+    v_zfs_arc_max_mb=$(dialog --inputbox "${zfs_arc_max_invalid_message}Enter ZFS ARC cache max size in Mb (minimum 64Mb, enter 0 for ZFS default value, the default will take up to 50% of memory):" 30 100 "$c_default_zfs_arc_max_mb" 3>&1 1>&2 2>&3)
 
     zfs_arc_max_invalid_message="Invalid size! "
   done
@@ -267,14 +267,14 @@ function ask_pool_names {
   local bpool_name_invalid_message=
 
   while [[ ! $v_bpool_name =~ ^[a-z][a-zA-Z_:.-]+$ ]]; do
-    v_bpool_name=$(dialog --ascii-lines --inputbox "${bpool_name_invalid_message}Insert the name for the boot pool" 30 100 bpool 3>&1 1>&2 2>&3)
+    v_bpool_name=$(dialog --inputbox "${bpool_name_invalid_message}Insert the name for the boot pool" 30 100 bpool 3>&1 1>&2 2>&3)
 
     bpool_name_invalid_message="Invalid pool name! "
   done
   local rpool_name_invalid_message=
 
   while [[ ! $v_rpool_name =~ ^[a-z][a-zA-Z_:.-]+$ ]]; do
-    v_rpool_name=$(dialog --ascii-lines --inputbox "${rpool_name_invalid_message}Insert the name for the root pool" 30 100 rpool 3>&1 1>&2 2>&3)
+    v_rpool_name=$(dialog --inputbox "${rpool_name_invalid_message}Insert the name for the root pool" 30 100 rpool 3>&1 1>&2 2>&3)
 
     rpool_name_invalid_message="Invalid pool name! "
   done
@@ -286,8 +286,8 @@ function ask_pool_tweaks {
   # shellcheck disable=SC2119
   print_step_info_header
 
-  v_bpool_tweaks=$(dialog --ascii-lines --inputbox "Insert the tweaks for the boot pool" 30 100 -- "$c_default_bpool_tweaks" 3>&1 1>&2 2>&3)
-  v_rpool_tweaks=$(dialog --ascii-lines --inputbox "Insert the tweaks for the root pool" 30 100 -- "$c_default_rpool_tweaks" 3>&1 1>&2 2>&3)
+  v_bpool_tweaks=$(dialog --inputbox "Insert the tweaks for the boot pool" 30 100 -- "$c_default_bpool_tweaks" 3>&1 1>&2 2>&3)
+  v_rpool_tweaks=$(dialog --inputbox "Insert the tweaks for the root pool" 30 100 -- "$c_default_rpool_tweaks" 3>&1 1>&2 2>&3)
 
   print_variables v_bpool_tweaks v_rpool_tweaks
 }
@@ -302,8 +302,8 @@ function ask_root_password {
   local password_repeat=-
 
   while [[ "$v_root_password" != "$password_repeat" || "$v_root_password" == "" ]]; do
-    v_root_password=$(dialog --ascii-lines --passwordbox "${password_invalid_message}Please enter the root account password (can't be empty):" 30 100 3>&1 1>&2 2>&3)
-    password_repeat=$(dialog --ascii-lines --passwordbox "Please repeat the password:" 30 100 3>&1 1>&2 2>&3)
+    v_root_password=$(dialog --passwordbox "${password_invalid_message}Please enter the root account password (can't be empty):" 30 100 3>&1 1>&2 2>&3)
+    password_repeat=$(dialog --passwordbox "Please repeat the password:" 30 100 3>&1 1>&2 2>&3)
 
     password_invalid_message="Passphrase empty, or not matching! "
   done
@@ -313,7 +313,7 @@ function ask_root_password {
 function ask_encryption {
   print_step_info_header
 
-  if dialog --ascii-lines --yesno 'Do you want to encrypt the root pool?' 30 100; then
+  if dialog --yesno 'Do you want to encrypt the root pool?' 30 100; then
     v_encrypt_rpool=1
   fi
   set +x
@@ -321,8 +321,8 @@ function ask_encryption {
     local passphrase_invalid_message=
     local passphrase_repeat=-
     while [[ "$v_passphrase" != "$passphrase_repeat" || ${#v_passphrase} -lt 8 ]]; do
-      v_passphrase=$(dialog --ascii-lines --passwordbox "${passphrase_invalid_message}Please enter the passphrase for the root pool (8 chars min.):" 30 100 3>&1 1>&2 2>&3)
-      passphrase_repeat=$(dialog --ascii-lines --passwordbox "Please repeat the passphrase:" 30 100 3>&1 1>&2 2>&3)
+      v_passphrase=$(dialog --passwordbox "${passphrase_invalid_message}Please enter the passphrase for the root pool (8 chars min.):" 30 100 3>&1 1>&2 2>&3)
+      passphrase_repeat=$(dialog --passwordbox "Please repeat the passphrase:" 30 100 3>&1 1>&2 2>&3)
 
       passphrase_invalid_message="Passphrase too short, or not matching! "
     done
@@ -333,7 +333,7 @@ function ask_encryption {
 function ask_zfs_experimental {
   print_step_info_header
 
-  if dialog --ascii-lines --yesno 'Do you want to use experimental zfs module build?' 30 100; then
+  if dialog --yesno 'Do you want to use experimental zfs module build?' 30 100; then
     v_zfs_experimental=1
   fi
 }
@@ -345,7 +345,7 @@ function ask_hostname {
   local hostname_invalid_message=
 
   while [[ ! $v_hostname =~ ^[a-z][a-zA-Z_:.-]+$ ]]; do
-    v_hostname=$(dialog --ascii-lines --inputbox "${hostname_invalid_message}Set the host name" 30 100 "$c_default_hostname" 3>&1 1>&2 2>&3)
+    v_hostname=$(dialog --inputbox "${hostname_invalid_message}Set the host name" 30 100 "$c_default_hostname" 3>&1 1>&2 2>&3)
 
     hostname_invalid_message="Invalid host name! "
   done
