@@ -417,6 +417,7 @@ function unmount_and_export_fs {
 
 #################### MAIN ################################
 export LC_ALL=en_US.UTF-8
+export NCURSES_NO_UTF8_ACS=1
 
 check_prerequisites
 
