@@ -492,7 +492,7 @@ done
 
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
-  apt-get install software-properties-common
+  apt-get install --yes software-properties-common
   apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 8CF63AD3F06FC659  
   add-apt-repository 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu bionic main'
   apt update
