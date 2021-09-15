@@ -348,7 +348,7 @@ function ask_root_password {
 function ask_encryption {
   print_step_info_header
 
-  if dialog --yesno 'Do you want to encrypt the root pool?' 30 100; then
+  if dialog --defaultno --yesno 'Do you want to encrypt the root pool?' 30 100; then
     v_encrypt_rpool=1
   fi
   set +x
@@ -368,7 +368,7 @@ function ask_encryption {
 function ask_zfs_experimental {
   print_step_info_header
 
-  if dialog --yesno 'Do you want to use experimental zfs module build?' 30 100; then
+  if dialog --defaultno --yesno 'Do you want to use experimental zfs module build?' 30 100; then
     v_zfs_experimental=1
   fi
 }
