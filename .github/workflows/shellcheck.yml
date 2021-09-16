@@ -21,4 +21,4 @@ jobs:
           files: hetzner-debian10-zfs-setup.sh hetzner-debian11-zfs-setup.sh hetzner-ubuntu18-zfs-setup.sh hetzner-ubuntu20-zfs-setup.sh 
           severity: error
           format: gcc
-          shell: dash
+          shell: bash
