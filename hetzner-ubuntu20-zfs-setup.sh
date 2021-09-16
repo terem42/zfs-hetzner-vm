@@ -509,11 +509,13 @@ echo "======= create zfs pools and datasets =========="
 
 zpool create \
   $v_bpool_tweaks -O canmount=off -O devices=off \
+  -o cachefile=/etc/zfs/zpool.cache \
   -O mountpoint=/boot -R $c_zfs_mount_dir -f \
   $v_bpool_name $pools_mirror_option "${bpool_disks_partitions[@]}"
 
 echo -n "$v_passphrase" | zpool create \
   $v_rpool_tweaks \
+  -o cachefile=/etc/zfs/zpool.cache \
   "${encryption_options[@]}" \
   -O mountpoint=/ -R $c_zfs_mount_dir -f \
   $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
@@ -711,25 +713,8 @@ chroot_execute "dpkg-reconfigure openssh-server -f noninteractive"
 echo "======= set root password =========="
 chroot_execute "echo root:$(printf "%q" "$v_root_password") | chpasswd"
 
-echo "======= setting up zfs services =========="
-chroot_execute "cat > /etc/systemd/system/zfs-import-bpool.service <<UNIT
-[Unit]
-DefaultDependencies=no
-Before=zfs-import-scan.service
-Before=zfs-import-cache.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStartPre=/bin/sh -c '[ -f /etc/zfs/zpool.cache ] && mv /etc/zfs/zpool.cache /etc/zfs/preboot_zpool.cache || true'
-ExecStart=/sbin/zpool import -N -o cachefile=none $v_bpool_name
-ExecStartPost=/bin/sh -c '[ -f /etc/zfs/preboot_zpool.cache ] && mv /etc/zfs/preboot_zpool.cache /etc/zfs/zpool.cache || true'
-
-[Install]
-WantedBy=zfs-import.target
-UNIT"
-
-chroot_execute "systemctl enable zfs-import-bpool.service"
+echo "======= setting up zfs cache =========="
+cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
 
 echo "========setting up zfs module parameters========"
 chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024)) >> /etc/modprobe.d/zfs.conf"
@@ -834,7 +819,7 @@ chroot_execute "zfs set canmount=noauto rpool"
 
 echo "======= setting mountpoints =========="
 chroot_execute "zfs set mountpoint=legacy $v_bpool_name/BOOT/ubuntu"
-chroot_execute "echo $v_bpool_name/BOOT/ubuntu /boot zfs nodev,relatime,x-systemd.requires=zfs-import-bpool.service 0 0 > /etc/fstab"
+chroot_execute "echo $v_bpool_name/BOOT/ubuntu /boot zfs nodev,relatime,x-systemd.requires=zfs-mount.service,x-systemd.device-timeout=10 0 0 > /etc/fstab"
 
 chroot_execute "zfs set mountpoint=legacy $v_rpool_name/var/log"
 chroot_execute "echo $v_rpool_name/var/log /var/log zfs nodev,relatime 0 0 >> /etc/fstab"
