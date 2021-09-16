@@ -499,7 +499,7 @@ echo "======= installing zfs on rescue system =========="
   apt install --yes zfs-dkms zfsutils-linux
   add-apt-repository -r 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
   apt update
-  find /usr/local/sbin/ -type l | xargs rm
+  find /usr/local/sbin/ -type l -exec rm {} +
   zfs --version
 
 echo "======= partitioning the disk =========="
