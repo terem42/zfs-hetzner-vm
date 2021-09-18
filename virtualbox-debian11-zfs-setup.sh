@@ -130,6 +130,7 @@ function check_prerequisites {
   if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep -q "install ok installed"; then
     apt install --yes dialog
   fi
+  apt install software-properties-common wget debootstrap
 }
 
 function initial_load_debian_zed_cache {
@@ -490,7 +491,6 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs stable on live system =========="
-apt install software-properties-common wget debootstrap
 wget -O - https://apt.terem.fr/apt_pub.gpg | apt-key add -
 add-apt-repository 'deb [arch=amd64] http://apt.terem.fr/public zfs-debian main'
 apt update
