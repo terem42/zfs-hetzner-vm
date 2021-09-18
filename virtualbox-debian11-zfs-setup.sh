@@ -540,6 +540,7 @@ echo "======= create zfs pools and datasets =========="
 
 zpool create \
   $v_bpool_tweaks -O canmount=off -O devices=off \
+  -o cachefile=/etc/zfs/zpool.cache \
   -O mountpoint=/boot -R $c_zfs_mount_dir -f \
   $v_bpool_name $pools_mirror_option "${bpool_disks_partitions[@]}"
 
@@ -547,6 +548,7 @@ echo -n "$v_passphrase" | zpool create \
   $v_rpool_tweaks \
   "${encryption_options[@]}" \
   -O mountpoint=/ -R $c_zfs_mount_dir -f \
+  -o cachefile=/etc/zfs/zpool.cache \
   $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
 
 zfs create -o canmount=off -o mountpoint=none "$v_rpool_name/ROOT"
@@ -727,6 +729,10 @@ chroot_execute "dpkg-reconfigure openssh-server -f noninteractive"
 
 echo "======= set root password =========="
 chroot_execute "echo root:$(printf "%q" "$v_root_password") | chpasswd"
+
+echo "======= setting up zfs cache =========="
+
+cp /etc/zfs/zpool.cache "$c_zfs_mount_dir/etc/zfs/zpool.cache"
 
 echo "========setting up zfs module parameters========"
 chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024)) >> /etc/modprobe.d/zfs.conf"
