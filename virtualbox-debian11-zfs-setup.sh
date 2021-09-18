@@ -490,7 +490,7 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs stable on live system =========="
-apt install software-properties-common
+apt install software-properties-common wget
 wget -O - https://apt.terem.fr/apt_pub.gpg | apt-key add -
 add-apt-repository 'deb [arch=amd64] http://apt.terem.fr/public zfs-debian main'
 apt update
