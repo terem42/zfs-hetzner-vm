@@ -702,23 +702,17 @@ echo "======= installing aux packages =========="
 chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"
 
 echo "======= installing zfs packages =========="
+chroot_execute "bash -c \"echo 'zfs-dkms zfs-dkms/note-incompatible-licenses note true' | debconf-set-selections\""
 if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "apt install software-properties-common"
   chroot_execute "wget -O - https://apt.terem.fr/apt_pub.gpg | apt-key add -"
   chroot_execute "add-apt-repository 'deb [arch=amd64] http://apt.terem.fr/public zfs-debian main'"
   chroot_execute "apt update"
-  chroot_execute "bash -c \"echo 'zfs-dkms zfs-dkms/note-incompatible-licenses note true' | debconf-set-selections\""
-  chroot_execute "apt install -t zfs-debian --yes zfs-dkms zfsutils-linux"
-else
-  chroot_execute "apt install --yes zfs-initramfs zfs-dkms"
-fi
-chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
-
-if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "apt install --yes -t zfs-debian-experimental zfs-initramfs zfs-dkms zfsutils-linux"
+  chroot_execute "apt install -t zfs-debian --yes zfs-initramfs zfs-dkms zfsutils-linux"
 else
   chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
+
 echo "======= installing OpenSSH and network tooling =========="
 chroot_execute "apt install --yes openssh-server net-tools"
 
