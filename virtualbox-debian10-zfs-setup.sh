@@ -208,7 +208,7 @@ LOG
   if [[ ${#v_suitable_disks[@]} -eq 0 ]]; then
     local dialog_message='No suitable disks have been found!
 
-If you think this is a bug, please open an issue on https://github.com/andrey42/zfs-hetzner-vm/issues, and attach the file `'"$c_disks_log"'`.
+If you think this is a bug, please open an issue on https://github.com/terem42/zfs-hetzner-vm/issues, and attach the file `'"$c_disks_log"'`.
 '
     dialog --ascii-lines --msgbox "$dialog_message" 30 100
 
@@ -652,7 +652,7 @@ CONF
 chroot_execute "apt update"
 
 echo "======= setting locale, console and language =========="
-chroot_execute "apt install --yes -qq locales debconf-i18n apt-utils"
+chroot_execute "apt install --yes -qq locales debconf-i18n apt-utils keyboard-configuration console-setup"
 sed -i 's/# en_US.UTF-8/en_US.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
 sed -i 's/# fr_FR.UTF-8/fr_FR.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
 sed -i 's/# fr_FR.UTF-8/fr_FR.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
@@ -694,7 +694,6 @@ CONF'
 
 chroot_execute "dpkg-reconfigure locales -f noninteractive"
 echo -e "LC_ALL=en_US.UTF-8\nLANG=en_US.UTF-8\n" >> "$c_zfs_mount_dir/etc/environment"
-chroot_execute "apt install -qq --yes keyboard-configuration console-setup"
 chroot_execute "dpkg-reconfigure keyboard-configuration -f noninteractive"
 chroot_execute "dpkg-reconfigure console-setup -f noninteractive"
 chroot_execute "setupcon"
@@ -711,6 +710,7 @@ chroot_execute "apt install --yes man wget curl software-properties-common nano 
 echo "======= installing zfs packages =========="
 if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "apt install software-properties-common"
+  chroot_execute "wget -O - https://apt.terem.fr/apt_pub.gpg | apt-key add -"
   chroot_execute "add-apt-repository 'deb [arch=amd64] http://apt.terem.fr/public zfs-debian main'"
   chroot_execute "apt update"
   chroot_execute "bash -c \"echo 'zfs-dkms zfs-dkms/note-incompatible-licenses note true' | debconf-set-selections\""
@@ -721,9 +721,9 @@ fi
 chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
 
 if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
+  chroot_execute "apt install --yes -t zfs-debian-experimental zfs-initramfs zfs-dkms zfsutils-linux"
 else
-  chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
+  chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
 echo "======= installing OpenSSH and network tooling =========="
 chroot_execute "apt install --yes openssh-server net-tools"

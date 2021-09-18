@@ -173,7 +173,7 @@ LOG
   if [[ ${#v_suitable_disks[@]} -eq 0 ]]; then
     local dialog_message='No suitable disks have been found!
 
-If you think this is a bug, please open an issue on https://github.com/andrey42/zfs-hetzner-vm/issues, and attach the file `'"$c_disks_log"'`.
+If you think this is a bug, please open an issue on https://github.com/terem42/zfs-hetzner-vm/issues, and attach the file `'"$c_disks_log"'`.
 '
     dialog --ascii-lines --msgbox "$dialog_message" 30 100
 
@@ -682,8 +682,8 @@ chroot_execute "systemctl disable thermald"
 
 echo "======= installing zfs packages =========="
 if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "wget -O - https://andrey42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
-  chroot_execute "add-apt-repository 'deb https://andrey42.github.io/zfs-debian/public zfs-debian-experimental main'"
+  chroot_execute "wget -O - https://terem42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
+  chroot_execute "add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'"
   chroot_execute "apt update"
 else
   chroot_execute "add-apt-repository --yes ppa:jonathonf/zfs"
