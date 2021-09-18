@@ -489,22 +489,16 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
   apt purge --yes "linux-image-$kver"
 done
 
-echo "======= installing zfs on rescue system =========="
-cat > "/etc/apt/sources.list" <<CONF
-deb [arch=i386,amd64] $c_deb_packages_repo bullseye main contrib non-free
-deb [arch=i386,amd64] $c_deb_packages_repo bullseye-updates main contrib non-free
-deb [arch=i386,amd64] $c_deb_packages_repo bullseye-backports main contrib non-free
-deb [arch=i386,amd64] $c_deb_security_repo bullseye/updates main contrib non-free
-CONF
-
+echo "======= installing zfs stable on live system =========="
+apt install software-properties-common
+wget -O - https://apt.terem.fr/apt_pub.gpg | apt-key add -
+add-apt-repository 'deb [arch=amd64] http://apt.terem.fr/public zfs-debian main'
 apt update
-
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-
-  apt update
-  apt install --yes -t bullseye-backports libelf-dev zfs-dkms wget debootstrap
-  modprobe zfs
-  zfs --version
+echo 'zfs-dkms zfs-dkms/note-incompatible-licenses note true' | debconf-set-selections
+apt install --yes libelf-dev
+apt install -t zfs-debian --yes zfs-dkms zfsutils-linux
+modprobe zfs
+zfs --version
 
 echo "======= partitioning the disk =========="
 
@@ -643,10 +637,10 @@ done
 
 echo "======= setting apt repos =========="
 cat > "$c_zfs_mount_dir/etc/apt/sources.list" <<CONF
-deb [arch=i386,amd64] $c_deb_packages_repo bullseye main contrib non-free
-deb [arch=i386,amd64] $c_deb_packages_repo bullseye-updates main contrib non-free
-deb [arch=i386,amd64] $c_deb_packages_repo bullseye-backports main contrib non-free
-deb [arch=i386,amd64] $c_deb_security_repo bullseye/updates main contrib non-free
+deb $c_deb_packages_repo bullseye main contrib non-free
+deb $c_deb_packages_repo bullseye-updates main contrib non-free
+deb $c_deb_security_repo bullseye-security main contrib non-free
+deb $c_deb_packages_repo bullseye-backports main contrib non-free
 CONF
 
 chroot_execute "apt update"
