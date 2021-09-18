@@ -127,10 +127,10 @@ function check_prerequisites {
 #    echo "SSH pubkey file is absent, please add it to the rescue system setting, then reboot into rescue system and run the script"
 #    exit 1
 #  fi
-  if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep -q "install ok installed"; then
-    apt install --yes dialog
-  fi
-  apt install software-properties-common wget debootstrap
+#  if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep -q "install ok installed"; then
+#    apt install --yes dialog
+#  fi
+  apt install --yes dialog software-properties-common wget debootstrap
 }
 
 function initial_load_debian_zed_cache {
