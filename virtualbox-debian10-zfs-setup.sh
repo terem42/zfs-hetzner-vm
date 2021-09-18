@@ -710,9 +710,11 @@ chroot_execute "apt install --yes man wget curl software-properties-common nano 
 
 echo "======= installing zfs packages =========="
 if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "wget -O - https://andrey42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
-  chroot_execute "add-apt-repository 'deb https://andrey42.github.io/zfs-debian/public zfs-debian-experimental main'"
+  chroot_execute "apt install software-properties-common"
+  chroot_execute "add-apt-repository 'deb [arch=amd64] http://apt.terem.fr/public zfs-debian main'"
   chroot_execute "apt update"
+  chroot_execute "bash -c \"echo 'zfs-dkms zfs-dkms/note-incompatible-licenses note true' | debconf-set-selections\""
+  chroot_execute "apt install -t zfs-debian --yes zfs-dkms zfsutils-linux"
 else
   chroot_execute "apt install --yes zfs-initramfs zfs-dkms"
 fi
@@ -728,7 +730,7 @@ chroot_execute "apt install --yes openssh-server net-tools"
 
 echo "======= setup OpenSSH  =========="
 mkdir -p "$c_zfs_mount_dir/root/.ssh/"
-wget https://raw.githubusercontent.com/andrey42/zfs-hetzner-vm/vmtest/authorized_keys -O "$c_zfs_mount_dir/root/.ssh/authorized_keys"
+wget https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/vmtest/authorized_keys -O "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 #cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' "$c_zfs_mount_dir/etc/ssh/sshd_config"
 sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/g' "$c_zfs_mount_dir/etc/ssh/sshd_config"
@@ -737,26 +739,6 @@ chroot_execute "dpkg-reconfigure openssh-server -f noninteractive"
 
 echo "======= set root password =========="
 chroot_execute "echo root:$(printf "%q" "$v_root_password") | chpasswd"
-
-echo "======= setting up zfs services =========="
-chroot_execute "cat > /etc/systemd/system/zfs-import-bpool.service <<UNIT
-[Unit]
-DefaultDependencies=no
-Before=zfs-import-scan.service
-Before=zfs-import-cache.service
-
-[Service]
-Type=oneshot
-RemainAfterExit=yes
-ExecStartPre=/bin/sh -c '[ -f /etc/zfs/zpool.cache ] && mv /etc/zfs/zpool.cache /etc/zfs/preboot_zpool.cache || true'
-ExecStart=/sbin/zpool import -N -o cachefile=none $v_bpool_name
-ExecStartPost=/bin/sh -c '[ -f /etc/zfs/preboot_zpool.cache ] && mv /etc/zfs/preboot_zpool.cache /etc/zfs/zpool.cache || true'
-
-[Install]
-WantedBy=zfs-import.target
-UNIT"
-
-chroot_execute "systemctl enable zfs-import-bpool.service"
 
 echo "========setting up zfs module parameters========"
 chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024)) >> /etc/modprobe.d/zfs.conf"
