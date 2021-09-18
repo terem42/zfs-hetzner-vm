@@ -490,7 +490,7 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs stable on live system =========="
-apt install software-properties-common wget
+apt install software-properties-common wget debootstrap
 wget -O - https://apt.terem.fr/apt_pub.gpg | apt-key add -
 add-apt-repository 'deb [arch=amd64] http://apt.terem.fr/public zfs-debian main'
 apt update
@@ -776,18 +776,6 @@ if [[ $v_encrypt_rpool == "1" ]]; then
   rm -rf "$c_zfs_mount_dir/etc/dropbear-initramfs/dropbear_dss_host_key"
 fi 
 
-#cd "$c_zfs_mount_dir/root"
-#wget http://ftp.de.debian.org/debian/pool/main/libt/libtommath/libtommath1_1.1.0-3_amd64.deb
-#wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-bin_2018.76-5_amd64.deb
-#wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-initramfs_2018.76-5_all.deb
-
-#chroot_execute "dpkg -i /root/libtommath1_1.1.0-3_amd64.deb"
-#chroot_execute "dpkg -i /root/dropbear-bin_2018.76-5_amd64.deb"
-#chroot_execute "dpkg -i /root/dropbear-initramfs_2018.76-5_all.deb"
-
-#rm $c_zfs_mount_dir/root/*.deb
-#cd /root
-
 echo "============setup root prompt============"
 cat > "$c_zfs_mount_dir/root/.bashrc" <<CONF
 export PS1='\[\033[01;31m\]\u\[\033[01;33m\]@\[\033[01;32m\]\h \[\033[01;33m\]\w \[\033[01;35m\]\$ \[\033[00m\]'
@@ -817,7 +805,7 @@ fi
 
 echo "======= setting mountpoints =========="
 chroot_execute "zfs set mountpoint=legacy $v_bpool_name/BOOT/ubuntu"
-chroot_execute "echo $v_bpool_name/BOOT/ubuntu /boot zfs nodev,relatime,x-systemd.requires=zfs-import-bpool.service 0 0 > /etc/fstab"
+chroot_execute "echo $v_bpool_name/BOOT/ubuntu /boot zfs nodev,relatime,x-systemd.requires=zfs-mount.service,x-systemd.device-timeout=10 0 0 > /etc/fstab"
 
 chroot_execute "zfs set mountpoint=legacy $v_rpool_name/var/log"
 chroot_execute "echo $v_rpool_name/var/log /var/log zfs nodev,relatime 0 0 >> /etc/fstab"
