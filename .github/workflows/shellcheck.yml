@@ -1,24 +1,11 @@
 name: shellcheck
 
-on:
-  push:
-    branches: [master, develop]
-  pull_request:
-    branches: [master]
+on: pull_request
 
 jobs:
-  Shellcheck:
-    name: Shellcheck
+  test:
     runs-on: ubuntu-latest
-
     steps:
-      - name: Code checkout
-        uses: actions/checkout@v2
-
-      - name: Check scripts with Shellcheck
-        uses: essentialkaos/shellcheck-action@v1
-        with:
-          files: hetzner-debian10-zfs-setup.sh hetzner-debian11-zfs-setup.sh hetzner-ubuntu18-zfs-setup.sh hetzner-ubuntu20-zfs-setup.sh 
-          severity: error
-          format: gcc
-          shell: bash
+    - uses: actions/checkout@v2
+    - name: Run shellcheck
+      run: ci/run_shellcheck.sh
