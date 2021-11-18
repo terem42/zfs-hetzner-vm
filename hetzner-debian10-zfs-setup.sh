@@ -62,7 +62,9 @@ function print_step_info_header {
 ###############################################################################
 # ${FUNCNAME[1]}"
 
-  [[ "${1:-}" != "" ]] && echo -n " $1" || true
+  if [[ "${1:-}" != "" ]]; then
+    echo -n " $1" 
+  fi
 
   echo "
 ###############################################################################
@@ -141,13 +143,13 @@ function initial_load_debian_zed_cache {
 
   local success=0
 
-  if [[ ! -e /mnt/etc/zfs/zfs-list.cache/rpool ]] || [[ -e /mnt/etc/zfs/zfs-list.cache/rpool && (( $(ls -l /mnt/etc/zfs/zfs-list.cache/rpool 2> /dev/null | cut -d ' ' -f 5) == 0 )) ]]; then
+  if [[ ! -e /mnt/etc/zfs/zfs-list.cache/rpool ]] || [[ -e /mnt/etc/zfs/zfs-list.cache/rpool && (( $(find /mnt/etc/zfs/zfs-list.cache/rpool -type f -printf '%s' 2> /dev/null) == 0 )) ]]; then
     chroot_execute "zfs set canmount=noauto rpool"
 
     SECONDS=0
 
     while (( SECONDS++ <= 120 )); do
-      if [[ -e /mnt/etc/zfs/zfs-list.cache/rpool ]] && (( "$(ls -l /mnt/etc/zfs/zfs-list.cache/rpool | cut -d ' ' -f 5)" > 0 )); then
+      if [[ -e /mnt/etc/zfs/zfs-list.cache/rpool ]] && (( $(find /mnt/etc/zfs/zfs-list.cache/rpool -type f -printf '%s' 2> /dev/null) > 0 )); then
         success=1
         break
       else
@@ -431,9 +433,8 @@ function unmount_and_export_fs {
   zpools_exported=99
   echo "===========exporting zfs pools============="
   set +e
-  while (( zpools_exported == 99 )) && (( SECONDS++ <= 60 )); do
-    zpool export -a 2> /dev/null
-    if [[ $? == 0 ]]; then
+  while (( zpools_exported == 99 )) && (( SECONDS++ <= 60 )); do    
+    if zpool export -a 2> /dev/null; then
       zpools_exported=1
       echo "all zfs pools were succesfully exported"
       break;
@@ -541,17 +542,17 @@ echo "======= create zfs pools and datasets =========="
   fi
 
 zpool create \
-  $v_bpool_tweaks -O canmount=off -O devices=off \
+  "$v_bpool_tweaks" -O canmount=off -O devices=off \
   -o cachefile=/etc/zfs/zpool.cache \
   -O mountpoint=/boot -R $c_zfs_mount_dir -f \
-  $v_bpool_name $pools_mirror_option "${bpool_disks_partitions[@]}"
+  "$v_bpool_name" "$pools_mirror_option" "${bpool_disks_partitions[@]}"
 
 echo -n "$v_passphrase" | zpool create \
   -o cachefile=/etc/zfs/zpool.cache \
-  $v_rpool_tweaks \
+  "$v_rpool_tweaks" \
   "${encryption_options[@]}" \
   -O mountpoint=/ -R $c_zfs_mount_dir -f \
-  $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
+  "$v_rpool_name $pools_mirror_option" "${rpool_disks_partitions[@]}"
 
 zfs create -o canmount=off -o mountpoint=none "$v_rpool_name/ROOT"
 zfs create -o canmount=off -o mountpoint=none "$v_bpool_name/BOOT"
@@ -838,7 +839,9 @@ chroot_execute "zfs set mountpoint=legacy $v_rpool_name/tmp"
 chroot_execute "echo $v_rpool_name/tmp /tmp zfs nodev,relatime 0 0 >> /etc/fstab"
 
 echo "========= add swap, if defined"
-[[ $v_swap_size -gt 0 ]] && chroot_execute "echo /dev/zvol/$v_rpool_name/swap none swap discard 0 0 >> /etc/fstab" || true
+if [[ $v_swap_size -gt 0 ]]; then
+  chroot_execute "echo /dev/zvol/$v_rpool_name/swap none swap discard 0 0 >> /etc/fstab"
+fi
 chroot_execute "echo RESUME=none > /etc/initramfs-tools/conf.d/resume"
 
 echo "======= unmounting filesystems and zfs pools =========="
