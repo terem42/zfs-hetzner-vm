@@ -381,7 +381,7 @@ function ask_hostname {
 
   local hostname_invalid_message=
 
-  while [[ ! $v_hostname =~ ^[a-z][a-zA-Z_:.-]+$ ]]; do
+  while [[ ! $v_hostname =~ ^[a-z][a-zA-Z0-9_:.-]+$ ]]; do
     v_hostname=$(dialog --inputbox "${hostname_invalid_message}Set the host name" 30 100 "$c_default_hostname" 3>&1 1>&2 2>&3)
 
     hostname_invalid_message="Invalid host name! "
