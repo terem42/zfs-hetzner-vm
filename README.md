@@ -49,3 +49,5 @@ To reattach, type `screen -r zfs`
 
 Upon succesfull run, the script will reboot system, and you will be able to login into it, using the same SSH key you have used within rescue console
 
+Please note that the drives you intend to format can not be in use,
+you can execute `mdadm --stop --scan` before running the script to halt default software raid operations.
