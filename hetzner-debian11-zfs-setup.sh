@@ -719,6 +719,12 @@ if [[ $v_zfs_experimental == "1" ]]; then
 else
   chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
+chroot_execute 'cat << DKMS > /etc/dkms/zfs.conf
+# override for /usr/src/zfs-*/dkms.conf:
+# always rebuild initrd when zfs module has been changed
+# (either by a ZFS update or a new kernel version)
+REMAKE_INITRD='yes'
+DKMS'
 
 echo "======= installing OpenSSH and network tooling =========="
 chroot_execute "apt install --yes openssh-server net-tools"
