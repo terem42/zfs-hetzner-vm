@@ -600,6 +600,7 @@ Gateway=fe80::1
 CONF
 
 chroot_execute "systemctl enable systemd-networkd.service"
+chroot_execute "systemctl enable systemd-resolved.service"
 
 
 mkdir -p "$c_zfs_mount_dir/etc/cloud/cloud.cfg.d/"
