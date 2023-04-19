@@ -486,11 +486,11 @@ determine_kernel_variant
 
 clear
 
-echo "===========remove unused kernels in rescue system========="
-for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | cut -s -d "/" -f 4); do
-  apt purge --yes "linux-headers-$kver"
-  apt purge --yes "linux-image-$kver"
-done
+#echo "===========remove unused kernels in rescue system========="
+#for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | cut -s -d "/" -f 4); do
+#  apt purge --yes "linux-headers-$kver"
+#  apt purge --yes "linux-image-$kver"
+#done
 
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
