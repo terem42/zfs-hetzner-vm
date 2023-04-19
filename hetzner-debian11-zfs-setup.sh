@@ -498,7 +498,7 @@ echo "======= installing zfs on rescue system =========="
   apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 8CF63AD3F06FC659
   add-apt-repository 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
   apt update
-  apt install --yes zfs-dkms zfsutils-linux
+  apt install --yes zfs-dkms zfs-modules zfsutils-linux
   add-apt-repository -r 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
   apt update
   find /usr/local/sbin/ -type l -exec rm {} +
@@ -718,7 +718,7 @@ if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "apt update"
   chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
 else
-  chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
+  chroot_execute "apt install --yes zfs-initramfs zfs-modules zfs-dkms zfsutils-linux"
 fi
 chroot_execute 'cat << DKMS > /etc/dkms/zfs.conf
 # override for /usr/src/zfs-*/dkms.conf:
