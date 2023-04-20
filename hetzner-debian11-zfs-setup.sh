@@ -495,13 +495,7 @@ done
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
   apt-get install --yes software-properties-common
-  apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 8CF63AD3F06FC659
-  add-apt-repository 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
-  apt update
-  apt install --yes zfs-dkms zfsutils-linux
-  add-apt-repository -r 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
-  apt update
-  find /usr/local/sbin/ -type l -exec rm {} +
+  echo "y" | zfs
   zfs --version
 
 echo "======= partitioning the disk =========="
