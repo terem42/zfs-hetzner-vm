@@ -393,7 +393,9 @@ function ask_hostname {
 
 function determine_kernel_variant {
   if dmidecode | grep -q vServer; then
-    v_kernel_variant="-cloud"
+    v_kernel_variant="-virtual"
+  else
+    v_kernel_variant="-generic"
   fi
 }
 
@@ -698,7 +700,7 @@ chroot_execute "rm -f /etc/localtime /etc/timezone"
 chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
 
 echo "======= installing latest kernel============="
-chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64"
+chroot_execute "apt install --yes linux-image${v_kernel_variant} linux-headers${v_kernel_variant}"
 
 echo "======= installing aux packages =========="
 chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"

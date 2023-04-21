@@ -392,7 +392,9 @@ function ask_hostname {
 
 function determine_kernel_variant {
   if dmidecode | grep -q vServer; then
-    v_kernel_variant="-cloud"
+    v_kernel_variant="-virtual"
+  else
+    v_kernel_variant="-generic"
   fi
 }
 
