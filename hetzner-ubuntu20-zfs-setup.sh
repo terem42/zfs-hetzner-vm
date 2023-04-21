@@ -461,9 +461,8 @@ done
 
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-  apt update
-  apt install -t bullseye-backports --yes zfs-dkms zfsutils-linux
-  find /usr/local/sbin/ -type l -exec rm {} +
+  apt-get install --yes software-properties-common
+  echo "y" | zfs
   zfs --version
 
 echo "======= partitioning the disk =========="

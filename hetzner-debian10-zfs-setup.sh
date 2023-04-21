@@ -494,7 +494,6 @@ done
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
   apt-get install --yes software-properties-common
-  apt-get install --yes software-properties-common
   echo "y" | zfs
   zfs --version
 
