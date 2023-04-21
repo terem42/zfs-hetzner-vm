@@ -148,12 +148,12 @@ function initial_load_debian_zed_cache {
 
     SECONDS=0
 
-    while (( SECONDS++ <= 120 )); do
+    while (( SECONDS++ <= 300 )); do
       if [[ -e /mnt/etc/zfs/zfs-list.cache/rpool ]] && (( $(find /mnt/etc/zfs/zfs-list.cache/rpool -type f -printf '%s' 2> /dev/null) > 0 )); then
         success=1
         break
       else
-        sleep 1
+        sleep 
       fi
     done
   else
