@@ -148,7 +148,7 @@ function initial_load_debian_zed_cache {
 
     SECONDS=0
 
-    while (( SECONDS++ <= 120 )); do
+    while (( SECONDS++ <= 300 )); do
       if [[ -e /mnt/etc/zfs/zfs-list.cache/rpool ]] && (( $(find /mnt/etc/zfs/zfs-list.cache/rpool -type f -printf '%s' 2> /dev/null) > 0 )); then
         success=1
         break
@@ -494,13 +494,7 @@ done
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
   apt-get install --yes software-properties-common
-  apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 8CF63AD3F06FC659
-  add-apt-repository 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
-  apt update
-  apt install --yes zfs-dkms zfsutils-linux
-  add-apt-repository -r 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
-  apt update
-  find /usr/local/sbin/ -type l -exec rm {} +
+  echo "y" | zfs
   zfs --version
 
 echo "======= partitioning the disk =========="
@@ -543,14 +537,14 @@ echo "======= create zfs pools and datasets =========="
 
 # shellcheck disable=SC2086
 zpool create \
-  "$v_bpool_tweaks" -O canmount=off -O devices=off \
-  -o cachefile=/etc/zfs/zpool.cache \
+  $v_bpool_tweaks -O canmount=off -O devices=off \
+  -o cachefile=/etc/zpool.cache \
   -O mountpoint=/boot -R $c_zfs_mount_dir -f \
   $v_bpool_name $pools_mirror_option "${bpool_disks_partitions[@]}"
 
 # shellcheck disable=SC2086
 echo -n "$v_passphrase" | zpool create \
-  -o cachefile=/etc/zfs/zpool.cache \
+  -o cachefile=/etc/zpool.cache \
   $v_rpool_tweaks \
   "${encryption_options[@]}" \
   -O mountpoint=/ -R $c_zfs_mount_dir -f \
@@ -741,7 +735,7 @@ echo "======= set root password =========="
 chroot_execute "echo root:$(printf "%q" "$v_root_password") | chpasswd"
 
 echo "======= setting up zfs cache =========="
-cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
+cp /etc/zpool.cache /mnt/etc/zfs/zpool.cache
 
 echo "========setting up zfs module parameters========"
 chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024)) >> /etc/modprobe.d/zfs.conf"
@@ -817,9 +811,21 @@ esac
 
 configure_networking
 
-ip route add 172.31.1.1/255.255.255.255 dev ens3
-ip route add default via 172.31.1.1 dev ens3
+ip route add 172.31.1.1/255.255.255.255 dev eth0
+ip route add default via 172.31.1.1 dev eth0
 CONF
+
+cat > "$c_zfs_mount_dir/etc/network/interfaces" <<'CONF'
+auto lo
+iface lo inet loopback
+iface lo inet6 loopback
+
+auto eth0
+iface eth0 inet dhcp
+iface eth0 inet6 dhcp
+CONF
+
+chmod 755 "$c_zfs_mount_dir/etc/network/interfaces"
 
 echo "======= update initramfs =========="
 chroot_execute "update-initramfs -u -k all"

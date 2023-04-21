@@ -2,7 +2,7 @@
 
 [![shellcheck](https://github.com/terem42/zfs-hetzner-vm/actions/workflows/shellcheck.yml/badge.svg)](https://github.com/terem42/zfs-hetzner-vm/actions/workflows/shellcheck.yml)
 
-Scripts to install Debian 11, 10 or Ubuntu 20, 18 with ZFS root on Hetzner root servers (virtual and dedicated).<br/>
+Scripts to install Debian 11, 10 or Ubuntu 18 LTS, 20 LTS, 22 LTS with ZFS root on Hetzner root servers (virtual and dedicated).<br/>
 __WARNING:__ all data on the disk will be destroyed.
 
 ## How to use:
@@ -12,10 +12,22 @@ __WARNING:__ all data on the disk will be destroyed.
 * Click "enable rescue and power cycle",  add SSH key to the rescue console, set it OS to linux64, then press mount rescue and power cycle" button.
 * connect via SSH to rescue console, and run the script from this repo.
 
+Debian 10 minimal setup with SSH server
+
+````bash
+wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-debian10-zfs-setup.sh | bash -
+````
+
 Debian 11 minimal setup with SSH server
 
 ````bash
 wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-debian11-zfs-setup.sh | bash -
+````
+
+Ubuntu 18.04 LTS minimal setup with SSH server
+
+````bash
+wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-ubuntu18-zfs-setup.sh | bash -
 ````
 
 Ubuntu 20 LTS minimal setup with SSH server
@@ -24,16 +36,10 @@ Ubuntu 20 LTS minimal setup with SSH server
 wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-ubuntu20-zfs-setup.sh | bash -
 ````
 
-Debian 10 minimal setup with SSH server
+Ubuntu 22 LTS minimal setup with SSH server
 
 ````bash
-wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-debian10-zfs-setup.sh | bash -
-````
-
-Ubuntu 18.04 LTS minimal setup with SSH server
-
-````bash
-wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-ubuntu18-zfs-setup.sh | bash -
+wget -qO- https://raw.githubusercontent.com/terem42/zfs-hetzner-vm/master/hetzner-ubuntu22-zfs-setup.sh | bash -
 ````
 
 Answer script questions about desired hostname and ZFS ARC cache size.

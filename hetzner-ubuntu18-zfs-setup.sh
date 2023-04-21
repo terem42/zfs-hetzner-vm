@@ -462,13 +462,7 @@ done
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
   apt-get install --yes software-properties-common
-  apt-key adv --keyserver keyserver.ubuntu.com --recv-keys 8CF63AD3F06FC659
-  add-apt-repository 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
-  apt update
-  apt install --yes zfs-dkms zfsutils-linux
-  add-apt-repository -r 'deb http://ppa.launchpad.net/jonathonf/zfs/ubuntu focal main'
-  apt update
-  find /usr/local/sbin/ -type l -exec rm {} +
+  echo "y" | zfs
   zfs --version
 
 echo "======= partitioning the disk =========="
@@ -512,14 +506,14 @@ echo "======= create zfs pools and datasets =========="
 # shellcheck disable=SC2086
 zpool create \
   $v_bpool_tweaks -O canmount=off -O devices=off \
-  -o cachefile=/etc/zfs/zpool.cache \
+  -o cachefile=/etc/zpool.cache \
   -O mountpoint=/boot -R $c_zfs_mount_dir -f \
   $v_bpool_name $pools_mirror_option "${bpool_disks_partitions[@]}"
 
 # shellcheck disable=SC2086
 echo -n "$v_passphrase" | zpool create \
   $v_rpool_tweaks \
-  -o cachefile=/etc/zfs/zpool.cache \
+  -o cachefile=/etc/zpool.cache \
   "${encryption_options[@]}" \
   -O mountpoint=/ -R $c_zfs_mount_dir -f \
   $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
@@ -724,7 +718,7 @@ echo "======= set root password =========="
 chroot_execute "echo root:$(printf "%q" "$v_root_password") | chpasswd"
 
 echo "======= setting up zfs cache =========="
-cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
+cp /etc/zpool.cache /mnt/etc/zfs/zpool.cache
 
 echo "========setting up zfs module parameters========"
 chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024)) >> /etc/modprobe.d/zfs.conf"

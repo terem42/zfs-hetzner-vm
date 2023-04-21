@@ -461,9 +461,8 @@ done
 
 echo "======= installing zfs on rescue system =========="
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-  apt update
-  apt install -t bullseye-backports --yes zfs-dkms zfsutils-linux
-  find /usr/local/sbin/ -type l -exec rm {} +
+  apt-get install --yes software-properties-common
+  echo "y" | zfs
   zfs --version
 
 echo "======= partitioning the disk =========="
@@ -507,14 +506,14 @@ echo "======= create zfs pools and datasets =========="
 # shellcheck disable=SC2086
 zpool create \
   $v_bpool_tweaks -O canmount=off -O devices=off \
-  -o cachefile=/etc/zfs/zpool.cache \
+  -o cachefile=/etc/zpool.cache \
   -O mountpoint=/boot -R $c_zfs_mount_dir -f \
   $v_bpool_name $pools_mirror_option "${bpool_disks_partitions[@]}"
 
 # shellcheck disable=SC2086
 echo -n "$v_passphrase" | zpool create \
   $v_rpool_tweaks \
-  -o cachefile=/etc/zfs/zpool.cache \
+  -o cachefile=/etc/zpool.cache \
   "${encryption_options[@]}" \
   -O mountpoint=/ -R $c_zfs_mount_dir -f \
   $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
@@ -675,10 +674,10 @@ chroot_execute "rm -f /etc/localtime /etc/timezone"
 chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
 
 echo "======= installing latest kernel============="
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers${v_kernel_variant}-hwe-18.04 linux-image${v_kernel_variant}-hwe-18.04"
+chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers${v_kernel_variant} linux-image${v_kernel_variant}"
 if [[ $v_kernel_variant == "-virtual" ]]; then
   # linux-image-extra is only available for virtual hosts
-  chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-image-extra-virtual-hwe-20.04"
+  chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-image-extra-virtual"
 fi
 
 
@@ -720,7 +719,7 @@ echo "======= set root password =========="
 chroot_execute "echo root:$(printf "%q" "$v_root_password") | chpasswd"
 
 echo "======= setting up zfs cache =========="
-cp /etc/zfs/zpool.cache /mnt/etc/zfs/zpool.cache
+cp /etc/zpool.cache /mnt/etc/zfs/zpool.cache
 
 echo "========setting up zfs module parameters========"
 chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024)) >> /etc/modprobe.d/zfs.conf"
