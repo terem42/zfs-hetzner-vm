@@ -815,6 +815,15 @@ ip route add 172.31.1.1/255.255.255.255 dev eth0
 ip route add default via 172.31.1.1 dev eth0
 CONF
 
+cat > "$c_zfs_mount_dir/etc/network/interfaces" <<'CONF'
+auto lo
+iface lo inet loopback
+auto eth0
+iface eth0 inet dhcp
+CONF
+
+chmod 755 "$c_zfs_mount_dir/etc/network/interfaces"
+
 echo "======= update initramfs =========="
 chroot_execute "update-initramfs -u -k all"
 

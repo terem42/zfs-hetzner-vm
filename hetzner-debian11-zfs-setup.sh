@@ -820,6 +820,15 @@ CONF
 
 chmod 755 "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount/static-route"
 
+cat > "$c_zfs_mount_dir/etc/network/interfaces" <<'CONF'
+auto lo
+iface lo inet loopback
+auto eth0
+iface eth0 inet dhcp
+CONF
+
+chmod 755 "$c_zfs_mount_dir/etc/network/interfaces"
+
 echo "======= update initramfs =========="
 chroot_execute "update-initramfs -u -k all"
 
