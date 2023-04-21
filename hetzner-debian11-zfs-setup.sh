@@ -814,8 +814,8 @@ esac
 
 configure_networking
 
-ip route add 172.31.1.1/255.255.255.255 dev ens3
-ip route add default via 172.31.1.1 dev ens3
+ip route add 172.31.1.1/255.255.255.255 dev eth0
+ip route add default via 172.31.1.1 dev eth0
 CONF
 
 chmod 755 "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount/static-route"
