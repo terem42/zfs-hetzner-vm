@@ -463,7 +463,7 @@ echo "======= installing zfs on rescue system =========="
   apt-get install --yes software-properties-common
   gpg --keyid-format long --keyserver hkp://keyserver.ubuntu.com --recv-keys 0x871920D1991BC93C
   gpg --export 871920D1991BC93C > /usr/share/keyrings/ubuntu-archive-keyring.gpg
-  apt --only-upgrade install debootstrap
+  apt --only-upgrade -t bullseye-backports install debootstrap
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
   echo "y" | zfs
   zfs --version
