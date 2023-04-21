@@ -712,7 +712,7 @@ if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "apt update"
   chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
 else
-  chroot_execute "apt install --yes zfs-initramfs zfs-dkms zfsutils-linux"
+  chroot_execute "apt install -t bullseye-backports --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
 chroot_execute 'cat << DKMS > /etc/dkms/zfs.conf
 # override for /usr/src/zfs-*/dkms.conf:
