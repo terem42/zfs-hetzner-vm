@@ -460,8 +460,11 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs on rescue system =========="
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
   apt-get install --yes software-properties-common
+  gpg --keyid-format long --keyserver hkp://keyserver.ubuntu.com --recv-keys 0x871920D1991BC93C
+  gpg --export 871920D1991BC93C > /usr/share/keyrings/ubuntu-archive-keyring.gpg
+  apt --only-upgrade install debootstrap
+  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
   echo "y" | zfs
   zfs --version
 
