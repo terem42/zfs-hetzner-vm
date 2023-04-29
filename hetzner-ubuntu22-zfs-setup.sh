@@ -478,7 +478,11 @@ echo "======= partitioning the disk =========="
 
   for selected_disk in "${v_selected_disks[@]}"; do
     wipefs --all --force "$selected_disk"
-    sgdisk -a1 -n1:24K:+1000K            -t1:EF02 "$selected_disk"
+    sgdisk --zap-all "$selected_disk"
+    # for UEFI
+    sgdisk -n1:1M:+512M                -t1:EF00 "$selected_disk" # bootloader
+    # for legacy BIOS
+    # sgdisk -a1 -n1:24K:+1000K            -t1:EF02 "$selected_disk"
     sgdisk -n2:0:+2G                   -t2:BF01 "$selected_disk" # Boot pool
     sgdisk -n3:0:"$tail_space_parameter" -t3:BF01 "$selected_disk" # Root pool
   done
@@ -728,10 +732,27 @@ cp /etc/zpool.cache /mnt/etc/zfs/zpool.cache
 echo "========setting up zfs module parameters========"
 chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024)) >> /etc/modprobe.d/zfs.conf"
 
+
+echo "======= setup EFI =========="
+apt install --yes dosfstools
+
+for selected_disk in "${v_selected_disks[@]}"; do
+  mkdosfs -F 32 -s 1 -n EFI "${selected_disk}-part1"
+done
+chroot_execute "mkdir /boot/efi"
+chroot_execute "echo /dev/disk/by-uuid/$(blkid -s UUID -o value ${v_selected_disks[0]}-part1) /boot/efi vfat defaults 0 0 >> /etc/fstab"
+chroot_execute "mount /boot/efi"
+
+chroot_execute "apt install --yes grub-efi-amd64 grub-efi-amd64-signed linux-image-generic shim-signed zfs-initramfs zsys"
+
+
 echo "======= setting up grub =========="
 chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
 chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
-chroot_execute "grub-install ${v_selected_disks[0]}"
+# for UEFI
+chroot_execute "grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=ubuntu --recheck --no-floppy"
+# for legacy BIOS
+# chroot_execute "grub-install ${v_selected_disks[0]}"
 
 chroot_execute "sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/g' /etc/default/grub"
 chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"net.ifnames=0\"|' /etc/default/grub"
@@ -827,6 +848,7 @@ echo "======= setting up zed =========="
 chroot_execute "zfs set canmount=noauto rpool"
 
 echo "======= setting mountpoints =========="
+chroot_execute "umount /boot/efi"
 chroot_execute "zfs set mountpoint=legacy $v_bpool_name/BOOT/ubuntu"
 chroot_execute "echo $v_bpool_name/BOOT/ubuntu /boot zfs nodev,relatime,x-systemd.requires=zfs-mount.service,x-systemd.device-timeout=10 0 0 > /etc/fstab"
 
@@ -851,3 +873,7 @@ unmount_and_export_fs
 
 echo "======== setup complete, rebooting ==============="
 reboot
+
+#echo "======= setup EFI part 2=========="
+# after reboot?
+#chroot_execute "dpkg-reconfigure grub-efi-amd64"
