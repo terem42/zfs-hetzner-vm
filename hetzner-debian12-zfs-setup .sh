@@ -35,8 +35,8 @@ v_zfs_experimental=
 v_suitable_disks=()
 
 # Constants
-c_deb_packages_repo=https://mirror.hetzner.com/debian/packages
-c_deb_security_repo=https://mirror.hetzner.com/debian/security
+c_deb_packages_repo=https://deb.debian.org/debian
+c_deb_security_repo=https://deb.debian.org/debian-security
 
 c_default_zfs_arc_max_mb=250
 c_default_bpool_tweaks="-o ashift=12 -O compression=lz4"
