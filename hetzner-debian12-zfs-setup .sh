@@ -238,7 +238,7 @@ function select_disks {
       menu_entries_option+=("$disk_id" "($block_device_basename)" "$disk_selection_status")
     done
 
-    local dialog_message="Select the ZFS devices (multiple selections will be in mirror).
+    local dialog_message="Select the ZFS devices (multiple selections can be in mirror or strip).
 
 Devices with mounted partitions, cdroms, and removable devices are not displayed!
 "
@@ -530,10 +530,11 @@ echo "======= create zfs pools and datasets =========="
     bpool_disks_partitions+=("${selected_disk}-part2")
   done
 
+  pools_mirror_option=
   if [[ ${#v_selected_disks[@]} -gt 1 ]]; then
-    pools_mirror_option=mirror
-  else
-    pools_mirror_option=
+    if dialog --defaultno --yesno "Do you want to use mirror mode for ${v_selected_disks[@]}?" 30 100; then 
+      pools_mirror_option=mirror
+    fi
   fi
 
 # shellcheck disable=SC2086
