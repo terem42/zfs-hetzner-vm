@@ -593,7 +593,7 @@ if [[ $v_swap_size -gt 0 ]]; then
 fi
 
 echo "======= setting up initial system packages =========="
-debootstrap --arch=amd64 bullseye "$c_zfs_mount_dir" "$c_deb_packages_repo"
+debootstrap --arch=amd64 bookworm "$c_zfs_mount_dir" "$c_deb_packages_repo"
 
 zfs set devices=off "$v_rpool_name"
 
@@ -638,10 +638,10 @@ done
 
 echo "======= setting apt repos =========="
 cat > "$c_zfs_mount_dir/etc/apt/sources.list" <<CONF
-deb $c_deb_packages_repo bullseye main contrib non-free
-deb $c_deb_packages_repo bullseye-updates main contrib non-free
-deb $c_deb_security_repo bullseye-security main contrib non-free
-deb $c_deb_packages_repo bullseye-backports main contrib non-free
+deb $c_deb_packages_repo bookworm main contrib non-free non-free-firmware
+deb $c_deb_packages_repo bookworm-updates main contrib non-free non-free-firmware
+deb $c_deb_security_repo bookworm-security main contrib non-free non-free-firmware
+deb $c_deb_packages_repo bookworm-backports main contrib non-free non-free-firmware
 CONF
 
 chroot_execute "apt update"
@@ -712,7 +712,7 @@ if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "apt update"
   chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
 else
-  chroot_execute "apt install -t bullseye-backports --yes zfs-initramfs zfs-dkms zfsutils-linux"
+  chroot_execute "apt install -t bookworm-backports --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
 chroot_execute 'cat << DKMS > /etc/dkms/zfs.conf
 # override for /usr/src/zfs-*/dkms.conf:
