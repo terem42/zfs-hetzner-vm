@@ -17,6 +17,8 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
+export TMPDIR=/tmp
+
 # Variables
 v_bpool_name=
 v_bpool_tweaks=
@@ -560,7 +562,6 @@ if [[ $v_swap_size -gt 0 ]]; then
 fi
 
 echo "======= setting up initial system packages =========="
-export TMPDIR=/tmp
 debootstrap --arch=amd64 jammy "$c_zfs_mount_dir" "$c_deb_packages_repo"
 
 zfs set devices=off "$v_rpool_name"

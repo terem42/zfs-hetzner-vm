@@ -17,6 +17,8 @@ set -o errexit
 set -o pipefail
 set -o nounset
 
+export TMPDIR=/tmp
+
 # Variables
 v_bpool_name=
 v_bpool_tweaks=
