@@ -534,7 +534,7 @@ echo "======= create zfs pools and datasets =========="
 
   pools_mirror_option=
   if [[ ${#v_selected_disks[@]} -gt 1 ]]; then
-    if dialog --defaultno --yesno "Do you want to use mirror mode for ${v_selected_disks[@]}?" 30 100; then 
+    if dialog --defaultno --yesno "Do you want to use mirror mode for ${v_selected_disks[*]}?" 30 100; then 
       pools_mirror_option=mirror
     fi
   fi
