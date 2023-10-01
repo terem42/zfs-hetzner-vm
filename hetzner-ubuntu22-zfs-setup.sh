@@ -560,6 +560,7 @@ if [[ $v_swap_size -gt 0 ]]; then
 fi
 
 echo "======= setting up initial system packages =========="
+export TMPDIR=/tmp
 debootstrap --arch=amd64 jammy "$c_zfs_mount_dir" "$c_deb_packages_repo"
 
 zfs set devices=off "$v_rpool_name"
@@ -673,8 +674,6 @@ chroot_execute "setupcon"
 
 chroot_execute "rm -f /etc/localtime /etc/timezone"
 chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
-
-chroot_execute "mkdir /tmp/hwc"
 
 echo "======= installing latest kernel============="
 chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers${v_kernel_variant} linux-image${v_kernel_variant}"
