@@ -48,7 +48,7 @@ To cope with network failures its higly recommended to run the commands above in
 Example of screen utility usage:
 
 ````bash
-screen -S zfs
+export LC_ALL=en_US.UTF-8 && screen -S zfs
 ````
 To detach from screen console, hit Ctrl-d then a
 To reattach, type `screen -r zfs`
