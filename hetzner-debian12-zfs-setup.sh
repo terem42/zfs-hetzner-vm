@@ -707,10 +707,10 @@ chroot_execute "dpkg-reconfigure console-setup -f noninteractive"
 chroot_execute "setupcon"
 
 chroot_execute "rm -f /etc/localtime /etc/timezone"
-chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
+chroot_execute "dpkg-reconfigure tzdata -f noninteractive"
 
 echo "======= installing latest kernel============="
-chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64 dpkg-dev linux-headers-generic linux-image-generic chroot_execute systemd-resolved"
+chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64 dpkg-dev linux-headers-generic linux-image-generic systemd-resolved"
 chroot_execute "systemctl enable systemd-resolved.service"
 
 echo "======= installing aux packages =========="
