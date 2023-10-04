@@ -617,8 +617,6 @@ CONF
 
 rm -rf $c_zfs_mount_dir/etc/network/interfaces.d/50-cloud-init.cfg
 
-#cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
-
 echo "======= preparing the jail for chroot =========="
 for virtual_fs_dir in proc sys dev; do
   mount --rbind "/$virtual_fs_dir" "$c_zfs_mount_dir/$virtual_fs_dir"
