@@ -640,7 +640,6 @@ Address=${ip6addr_prefix}:1/64
 Gateway=fe80::1
 CONF
 chroot_execute "systemctl enable systemd-networkd.service"
-#chroot_execute "systemctl enable systemd-resolved.service"
 
 cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
 
@@ -711,7 +710,8 @@ chroot_execute "rm -f /etc/localtime /etc/timezone"
 chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
 
 echo "======= installing latest kernel============="
-chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64 dpkg-dev linux-headers-generic linux-image-generic"
+chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64 dpkg-dev linux-headers-generic linux-image-generic chroot_execute systemd-resolved"
+chroot_execute "systemctl enable systemd-resolved.service"
 
 echo "======= installing aux packages =========="
 chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"
