@@ -530,9 +530,8 @@ zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/ubuntu"
 zfs mount "$v_bpool_name/BOOT/ubuntu"
 
 zfs create                                 "$v_rpool_name/home"
-zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
+#zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
 zfs create -o canmount=off                 "$v_rpool_name/var"
-zfs create -o canmount=off                 "$v_rpool_name/var/lib"
 zfs create                                 "$v_rpool_name/var/log"
 zfs create                                 "$v_rpool_name/var/spool"
 

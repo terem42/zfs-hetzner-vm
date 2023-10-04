@@ -575,9 +575,8 @@ zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/debian"
 zfs mount "$v_bpool_name/BOOT/debian"
 
 zfs create                                 "$v_rpool_name/home"
-zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
+#zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
 zfs create -o canmount=off                 "$v_rpool_name/var"
-zfs create -o canmount=off                 "$v_rpool_name/var/lib"
 zfs create                                 "$v_rpool_name/var/log"
 zfs create                                 "$v_rpool_name/var/spool"
 
@@ -800,8 +799,13 @@ export LS_OPTIONS='--color=auto -h'
 eval "\$(dircolors)"
 CONF
 
-echo "========running packages upgrade==========="
+echo "========= add root pubkey for login via SSH"
+mkdir -p "$c_zfs_mount_dir/root/.ssh/"
+cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
+
+echo "========running packages upgrade and autoremove==========="
 chroot_execute "apt upgrade --yes"
+chroot_execute "apt autoremove --yes"
 
 echo "===========add static route to initramfs via hook to add default routes for Hetzner due to Debian/Ubuntu initramfs DHCP bug ========="
 mkdir -p "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount"
@@ -865,12 +869,6 @@ if [[ $v_swap_size -gt 0 ]]; then
 fi
 
 chroot_execute "echo RESUME=none > /etc/initramfs-tools/conf.d/resume"
-
-echo "========= add root pubkey for login via SSH"
-mkdir -p "$c_zfs_mount_dir/root/.ssh/"
-cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
-echo "========= show root auth key ==========="
-cat "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 
 echo "======= unmounting filesystems and zfs pools =========="
 unmount_and_export_fs
