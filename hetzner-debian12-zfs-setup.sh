@@ -498,7 +498,8 @@ echo "======= installing zfs on rescue system =========="
 
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
 #  echo "y" | zfs
-  apt install --yes software-properties-common dpkg-dev dkms linux-headers-generic linux-image-generic
+# linux-headers-generic linux-image-generic
+  apt install --yes software-properties-common dpkg-dev dkms
   rm -f "$(which zfs)"
   rm -f "$(which zpool)"
   echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
@@ -640,7 +641,7 @@ Gateway=fe80::1
 CONF
 chroot_execute "systemctl enable systemd-networkd.service"
 
-cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
+#cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
 
 echo "======= preparing the jail for chroot =========="
 for virtual_fs_dir in proc sys dev; do
@@ -709,8 +710,8 @@ chroot_execute "rm -f /etc/localtime /etc/timezone"
 chroot_execute "dpkg-reconfigure tzdata -f noninteractive"
 
 echo "======= installing latest kernel============="
-chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64 dpkg-dev linux-headers-generic linux-image-generic"
-#chroot_execute "systemctl enable systemd-resolved.service"
+# linux-headers-generic linux-image-generic
+chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64 dpkg-dev"
 
 echo "======= installing aux packages =========="
 chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"
