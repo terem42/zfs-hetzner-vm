@@ -640,8 +640,7 @@ Address=${ip6addr_prefix}:1/64
 Gateway=fe80::1
 CONF
 chroot_execute "systemctl enable systemd-networkd.service"
-chroot_execute "systemctl enable systemd-resolved.service"
-
+#chroot_execute "systemctl enable systemd-resolved.service"
 
 cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
 
