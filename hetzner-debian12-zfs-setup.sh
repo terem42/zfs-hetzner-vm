@@ -859,16 +859,18 @@ chroot_execute "echo $v_rpool_name/var/tmp /var/tmp zfs nodev,relatime 0 0 >> /e
 chroot_execute "zfs set mountpoint=legacy $v_rpool_name/tmp"
 chroot_execute "echo $v_rpool_name/tmp /tmp zfs nodev,relatime 0 0 >> /etc/fstab"
 
-echo "========= add root pubkey for login via SSH"
-mkdir -p "$c_zfs_mount_dir/root/.ssh/"
-cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
-
 echo "========= add swap, if defined"
 if [[ $v_swap_size -gt 0 ]]; then
   chroot_execute "echo /dev/zvol/$v_rpool_name/swap none swap discard 0 0 >> /etc/fstab"
 fi
 
 chroot_execute "echo RESUME=none > /etc/initramfs-tools/conf.d/resume"
+
+echo "========= add root pubkey for login via SSH"
+mkdir -p "$c_zfs_mount_dir/root/.ssh/"
+cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
+echo "========= show root auth key ==========="
+cat "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 
 echo "======= unmounting filesystems and zfs pools =========="
 unmount_and_export_fs
