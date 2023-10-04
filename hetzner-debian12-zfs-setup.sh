@@ -495,20 +495,22 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs on rescue system =========="
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-  apt-get install --yes software-properties-common
+
+  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
 #  echo "y" | zfs
-#  zfs --version 
-  apt install --yes dpkg-dev dkms linux-headers-generic linux-image-generic
-  rm "$(which zfs)"
-  export PATH=$PATH:/usr/sbin
+  apt install --yes software-properties-common dpkg-dev dkms linux-headers-generic linux-image-generic
+  rm -f "$(which zfs)"
+  rm -f "$(which zpool)"
   echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
   echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
-  apt update
+  apt update  
   apt install -t testing --yes zfs-dkms zfsutils-linux
   rm /etc/apt/sources.list.d/bookworm-testing.list
   rm /etc/apt/preferences.d/90_zfs
   apt update
+  export PATH=$PATH:/usr/sbin
+  zfs --version
+
 echo "======= partitioning the disk =========="
 
   if [[ $v_free_tail_space -eq 0 ]]; then
