@@ -604,11 +604,10 @@ Address=${ip6addr_prefix}:1/64
 Gateway=fe80::1
 CONF
 
-cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
-
 chroot_execute "systemctl enable systemd-networkd.service"
 chroot_execute "systemctl enable systemd-resolved.service"
 
+cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
 
 mkdir -p "$c_zfs_mount_dir/etc/cloud/cloud.cfg.d/"
 cat > "$c_zfs_mount_dir/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" <<CONF
