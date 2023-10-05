@@ -495,9 +495,20 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs on rescue system =========="
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-  apt-get install --yes software-properties-common
-  echo "y" | zfs
+  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
+#  echo "y" | zfs
+# linux-headers-generic linux-image-generic
+  apt install --yes software-properties-common dpkg-dev dkms
+  rm -f "$(which zfs)"
+  rm -f "$(which zpool)"
+  echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
+  echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
+  apt update  
+  apt install -t testing --yes zfs-dkms zfsutils-linux
+  rm /etc/apt/sources.list.d/bookworm-testing.list
+  rm /etc/apt/preferences.d/90_zfs
+  apt update
+  export PATH=$PATH:/usr/sbin
   zfs --version
 
 echo "======= partitioning the disk =========="
@@ -563,9 +574,7 @@ zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/debian"
 zfs mount "$v_bpool_name/BOOT/debian"
 
 zfs create                                 "$v_rpool_name/home"
-zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
 zfs create -o canmount=off                 "$v_rpool_name/var"
-zfs create -o canmount=off                 "$v_rpool_name/var/lib"
 zfs create                                 "$v_rpool_name/var/log"
 zfs create                                 "$v_rpool_name/var/spool"
 
@@ -630,8 +639,7 @@ CONF
 chroot_execute "systemctl enable systemd-networkd.service"
 chroot_execute "systemctl enable systemd-resolved.service"
 
-
-cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
+#cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
 
 echo "======= preparing the jail for chroot =========="
 for virtual_fs_dir in proc sys dev; do
