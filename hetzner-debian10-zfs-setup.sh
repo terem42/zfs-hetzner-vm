@@ -573,9 +573,7 @@ zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/debian"
 zfs mount "$v_bpool_name/BOOT/debian"
 
 zfs create                                 "$v_rpool_name/home"
-zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
 zfs create -o canmount=off                 "$v_rpool_name/var"
-zfs create -o canmount=off                 "$v_rpool_name/var/lib"
 zfs create                                 "$v_rpool_name/var/log"
 zfs create                                 "$v_rpool_name/var/spool"
 
@@ -639,8 +637,6 @@ Gateway=fe80::1
 CONF
 chroot_execute "systemctl enable systemd-networkd.service"
 chroot_execute "systemctl enable systemd-resolved.service"
-
-#cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
 
 echo "======= preparing the jail for chroot =========="
 for virtual_fs_dir in proc sys dev; do
