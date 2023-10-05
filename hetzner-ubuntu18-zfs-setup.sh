@@ -462,9 +462,20 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs on rescue system =========="
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-  apt-get install --yes software-properties-common
-  echo "y" | zfs
+  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
+#  echo "y" | zfs
+# linux-headers-generic linux-image-generic
+  apt install --yes software-properties-common dpkg-dev dkms
+  rm -f "$(which zfs)"
+  rm -f "$(which zpool)"
+  echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
+  echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
+  apt update  
+  apt install -t testing --yes zfs-dkms zfsutils-linux
+  rm /etc/apt/sources.list.d/bookworm-testing.list
+  rm /etc/apt/preferences.d/90_zfs
+  apt update
+  export PATH=$PATH:/usr/sbin
   zfs --version
 
 echo "======= partitioning the disk =========="
@@ -530,9 +541,7 @@ zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/ubuntu"
 zfs mount "$v_bpool_name/BOOT/ubuntu"
 
 zfs create                                 "$v_rpool_name/home"
-zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
 zfs create -o canmount=off                 "$v_rpool_name/var"
-zfs create -o canmount=off                 "$v_rpool_name/var/lib"
 zfs create                                 "$v_rpool_name/var/log"
 zfs create                                 "$v_rpool_name/var/spool"
 
@@ -583,7 +592,7 @@ ff02::2 ip6-allrouters
 ff02::3 ip6-allhosts
 CONF
 
-ip6addr_prefix=$(ip -6 a s | grep -E "inet6.+global" | sed -nE 's/.+inet6\s(([0-9a-z]{1,4}:){4,4}).+/\1/p')
+ip6addr_prefix=$(ip -6 a s | grep -E "inet6.+global" | sed -nE 's/.+inet6\s(([0-9a-z]{1,4}:){4,4}).+/\1/p' | head -n 1)
 
 cat <<CONF > /mnt/etc/systemd/network/10-eth0.network
 [Match]
@@ -598,6 +607,7 @@ CONF
 chroot_execute "systemctl enable systemd-networkd.service"
 chroot_execute "systemctl enable systemd-resolved.service"
 
+#cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
 
 mkdir -p "$c_zfs_mount_dir/etc/cloud/cloud.cfg.d/"
 cat > "$c_zfs_mount_dir/etc/cloud/cloud.cfg.d/99-disable-network-config.cfg" <<CONF
@@ -607,7 +617,6 @@ CONF
 
 rm -rf $c_zfs_mount_dir/etc/network/interfaces.d/50-cloud-init.cfg
 
-cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
 
 echo "======= preparing the jail for chroot =========="
 for virtual_fs_dir in proc sys dev; do

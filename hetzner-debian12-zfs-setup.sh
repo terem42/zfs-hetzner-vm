@@ -495,9 +495,21 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
 done
 
 echo "======= installing zfs on rescue system =========="
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
-  apt-get install --yes software-properties-common
-  echo "y" | zfs
+
+  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
+#  echo "y" | zfs
+# linux-headers-generic linux-image-generic
+  apt install --yes software-properties-common dpkg-dev dkms
+  rm -f "$(which zfs)"
+  rm -f "$(which zpool)"
+  echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
+  echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
+  apt update  
+  apt install -t testing --yes zfs-dkms zfsutils-linux
+  rm /etc/apt/sources.list.d/bookworm-testing.list
+  rm /etc/apt/preferences.d/90_zfs
+  apt update
+  export PATH=$PATH:/usr/sbin
   zfs --version
 
 echo "======= partitioning the disk =========="
@@ -564,9 +576,8 @@ zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/debian"
 zfs mount "$v_bpool_name/BOOT/debian"
 
 zfs create                                 "$v_rpool_name/home"
-zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
+#zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
 zfs create -o canmount=off                 "$v_rpool_name/var"
-zfs create -o canmount=off                 "$v_rpool_name/var/lib"
 zfs create                                 "$v_rpool_name/var/log"
 zfs create                                 "$v_rpool_name/var/spool"
 
@@ -617,7 +628,7 @@ ff02::2 ip6-allrouters
 ff02::3 ip6-allhosts
 CONF
 
-ip6addr_prefix=$(ip -6 a s | grep -E "inet6.+global" | sed -nE 's/.+inet6\s(([0-9a-z]{1,4}:){4,4}).+/\1/p')
+ip6addr_prefix=$(ip -6 a s | grep -E "inet6.+global" | sed -nE 's/.+inet6\s(([0-9a-z]{1,4}:){4,4}).+/\1/p' | head -n 1)
 
 cat <<CONF > /mnt/etc/systemd/network/10-eth0.network
 [Match]
@@ -629,10 +640,6 @@ Address=${ip6addr_prefix}:1/64
 Gateway=fe80::1
 CONF
 chroot_execute "systemctl enable systemd-networkd.service"
-chroot_execute "systemctl enable systemd-resolved.service"
-
-
-cp /etc/resolv.conf $c_zfs_mount_dir/etc/resolv.conf
 
 echo "======= preparing the jail for chroot =========="
 for virtual_fs_dir in proc sys dev; do
@@ -698,10 +705,11 @@ chroot_execute "dpkg-reconfigure console-setup -f noninteractive"
 chroot_execute "setupcon"
 
 chroot_execute "rm -f /etc/localtime /etc/timezone"
-chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
+chroot_execute "dpkg-reconfigure tzdata -f noninteractive"
 
 echo "======= installing latest kernel============="
-chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64"
+# linux-headers-generic linux-image-generic
+chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64 dpkg-dev"
 
 echo "======= installing aux packages =========="
 chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"
@@ -728,8 +736,6 @@ echo "======= installing OpenSSH and network tooling =========="
 chroot_execute "apt install --yes openssh-server net-tools"
 
 echo "======= setup OpenSSH  =========="
-mkdir -p "$c_zfs_mount_dir/root/.ssh/"
-cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' "$c_zfs_mount_dir/etc/ssh/sshd_config"
 sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/g' "$c_zfs_mount_dir/etc/ssh/sshd_config"
 chroot_execute "rm /etc/ssh/ssh_host_*"
@@ -792,8 +798,13 @@ export LS_OPTIONS='--color=auto -h'
 eval "\$(dircolors)"
 CONF
 
-echo "========running packages upgrade==========="
+echo "========= add root pubkey for login via SSH"
+mkdir -p "$c_zfs_mount_dir/root/.ssh/"
+cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
+
+echo "========running packages upgrade and autoremove==========="
 chroot_execute "apt upgrade --yes"
+chroot_execute "apt autoremove --yes"
 
 echo "===========add static route to initramfs via hook to add default routes for Hetzner due to Debian/Ubuntu initramfs DHCP bug ========="
 mkdir -p "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount"
