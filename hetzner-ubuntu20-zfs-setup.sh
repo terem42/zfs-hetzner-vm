@@ -755,8 +755,7 @@ done
 if [[ $v_encrypt_rpool == "1" ]]; then
   echo "=========set up dropbear=============="
   chroot_execute "apt install --yes dropbear-initramfs"
-  chroot_execute "apt purge cryptsetup-initramfs --yes"
-
+  
   cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/etc/dropbear-initramfs/authorized_keys"
 
   cp "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key" "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key_temp"
@@ -795,6 +794,7 @@ CONF
 
 echo "========running packages upgrade==========="
 chroot_execute "apt upgrade --yes"
+chroot_execute "apt purge cryptsetup-initramfs --yes"
 
 echo "===========add static route to initramfs via hook to add default routes due to Ubuntu initramfs DHCP bug ========="
 mkdir -p "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount"
