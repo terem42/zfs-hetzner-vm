@@ -801,7 +801,7 @@ CONF
 
 echo "========running packages upgrade==========="
 chroot_execute "apt upgrade --yes"
-chroot_execute "apt purge cryptsetup-initramfs --yes"
+chroot_execute "apt purge cryptsetup* --yes"
 
 echo "===========add static route to initramfs via hook to add default routes for Hetzner due to Debian/Ubuntu initramfs DHCP bug ========="
 mkdir -p "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount"
