@@ -638,6 +638,8 @@ CONF
 chroot_execute "systemctl enable systemd-networkd.service"
 chroot_execute "systemctl enable systemd-resolved.service"
 
+allow-hotplug eno1
+
 echo "======= preparing the jail for chroot =========="
 for virtual_fs_dir in proc sys dev; do
   mount --rbind "/$virtual_fs_dir" "$c_zfs_mount_dir/$virtual_fs_dir"
@@ -830,7 +832,7 @@ auto lo
 iface lo inet loopback
 iface lo inet6 loopback
 
-auto eth0
+allow-hotplug eth0
 iface eth0 inet dhcp
 iface eth0 inet6 dhcp
 CONF
