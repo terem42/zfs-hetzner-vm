@@ -773,6 +773,8 @@ if [[ $v_encrypt_rpool == "1" ]]; then
   echo "=========set up dropbear=============="
 
   chroot_execute "apt install --yes dropbear-initramfs"
+  chroot_execute "apt purge cryptsetup-initramfs --yes"
+  
   mkdir -p "$c_zfs_mount_dir/etc/dropbear/initramfs"
   cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/etc/dropbear/initramfs/authorized_keys"
 
@@ -838,6 +840,8 @@ chmod 755 "$c_zfs_mount_dir/etc/network/interfaces"
 
 echo "======= update initramfs =========="
 chroot_execute "update-initramfs -u -k all"
+
+chroot_execute "apt remove cryptsetup-initramfs --yes"
 
 echo "======= update grub =========="
 chroot_execute "update-grub"
