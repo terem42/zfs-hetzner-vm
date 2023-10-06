@@ -638,8 +638,6 @@ CONF
 chroot_execute "systemctl enable systemd-networkd.service"
 chroot_execute "systemctl enable systemd-resolved.service"
 
-allow-hotplug eno1
-
 echo "======= preparing the jail for chroot =========="
 for virtual_fs_dir in proc sys dev; do
   mount --rbind "/$virtual_fs_dir" "$c_zfs_mount_dir/$virtual_fs_dir"
@@ -827,17 +825,17 @@ ip route add 172.31.1.1/255.255.255.255 dev eth0
 ip route add default via 172.31.1.1 dev eth0
 CONF
 
-#cat > "$c_zfs_mount_dir/etc/network/interfaces" <<'CONF'
-#auto lo
-#iface lo inet loopback
-#iface lo inet6 loopback
+cat > "$c_zfs_mount_dir/etc/network/interfaces" <<'CONF'
+auto lo
+iface lo inet loopback
+iface lo inet6 loopback
 
-#allow-hotplug eth0
-#iface eth0 inet dhcp
-#iface eth0 inet6 dhcp
-#CONF
+allow-hotplug eth0
+iface eth0 inet dhcp
+iface eth0 inet6 dhcp
+CONF
 
-#chmod 755 "$c_zfs_mount_dir/etc/network/interfaces"
+chmod 755 "$c_zfs_mount_dir/etc/network/interfaces"
 
 echo "======= update initramfs =========="
 chroot_execute "update-initramfs -u -k all"
