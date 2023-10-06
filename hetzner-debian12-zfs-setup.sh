@@ -773,21 +773,22 @@ if [[ $v_encrypt_rpool == "1" ]]; then
   echo "=========set up dropbear=============="
 
   chroot_execute "apt install --yes dropbear-initramfs"
-
-  cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/etc/dropbear-initramfs/authorized_keys"
+  
+  mkdir -p "$c_zfs_mount_dir/etc/dropbear/initramfs"
+  cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/etc/dropbear/initramfs/authorized_keys"
 
   cp "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key" "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key_temp"
   chroot_execute "ssh-keygen -p -i -m pem -N '' -f /etc/ssh/ssh_host_rsa_key_temp"
-  chroot_execute "/usr/lib/dropbear/dropbearconvert openssh dropbear /etc/ssh/ssh_host_rsa_key_temp /etc/dropbear-initramfs/dropbear_rsa_host_key"
+  chroot_execute "/usr/lib/dropbear/dropbearconvert openssh dropbear /etc/ssh/ssh_host_rsa_key_temp /etc/dropbear/initramfs/dropbear_rsa_host_key"
   rm -rf "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key_temp"
 
   cp "$c_zfs_mount_dir/etc/ssh/ssh_host_ecdsa_key" "$c_zfs_mount_dir/etc/ssh/ssh_host_ecdsa_key_temp"
   chroot_execute "ssh-keygen -p -i -m pem -N '' -f /etc/ssh/ssh_host_ecdsa_key_temp"
-  chroot_execute "/usr/lib/dropbear/dropbearconvert openssh dropbear /etc/ssh/ssh_host_ecdsa_key_temp /etc/dropbear-initramfs/dropbear_ecdsa_host_key"
+  chroot_execute "/usr/lib/dropbear/dropbearconvert openssh dropbear /etc/ssh/ssh_host_ecdsa_key_temp /etc/dropbear/initramfs/dropbear_ecdsa_host_key"
   chroot_execute "rm -rf /etc/ssh/ssh_host_ecdsa_key_temp"
   rm -rf "$c_zfs_mount_dir/etc/ssh/ssh_host_ecdsa_key_temp"
 
-  rm -rf "$c_zfs_mount_dir/etc/dropbear-initramfs/dropbear_dss_host_key"
+  rm -rf "$c_zfs_mount_dir/etc/dropbear/initramfs/dropbear_dss_host_key"
 fi
 
 echo "============setup root prompt============"
@@ -804,7 +805,7 @@ cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 
 echo "========running packages upgrade and autoremove==========="
 chroot_execute "apt upgrade --yes"
-chroot_execute "apt autoremove --yes"
+chroot_execute "apt purge cryptsetup* --yes"
 
 echo "===========add static route to initramfs via hook to add default routes for Hetzner due to Debian/Ubuntu initramfs DHCP bug ========="
 mkdir -p "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount"
@@ -838,6 +839,8 @@ chmod 755 "$c_zfs_mount_dir/etc/network/interfaces"
 
 echo "======= update initramfs =========="
 chroot_execute "update-initramfs -u -k all"
+
+chroot_execute "apt remove cryptsetup* --yes"
 
 echo "======= update grub =========="
 chroot_execute "update-grub"
