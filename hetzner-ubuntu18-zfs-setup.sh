@@ -769,18 +769,6 @@ if [[ $v_encrypt_rpool == "1" ]]; then
   rm -rf "$c_zfs_mount_dir/etc/ssh/ssh_host_ecdsa_key_temp"
 
   rm -rf "$c_zfs_mount_dir/etc/dropbear-initramfs/dropbear_dss_host_key"
-
-  #cd "$c_zfs_mount_dir/root"
-  #wget http://ftp.de.debian.org/debian/pool/main/libt/libtommath/libtommath1_1.1.0-3_amd64.deb
-  #wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-bin_2018.76-5_amd64.deb
-  #wget http://ftp.de.debian.org/debian/pool/main/d/dropbear/dropbear-initramfs_2018.76-5_all.deb
-
-  #chroot_execute "dpkg -i /root/libtommath1_1.1.0-3_amd64.deb"
-  #chroot_execute "dpkg -i /root/dropbear-bin_2018.76-5_amd64.deb"
-  #chroot_execute "dpkg -i /root/dropbear-initramfs_2018.76-5_all.deb"
-
-  #rm $c_zfs_mount_dir/root/*.deb
-  #cd /root
 fi
 
 echo "============setup root prompt============"
