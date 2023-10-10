@@ -819,7 +819,7 @@ chroot_execute "update-grub"
 
 echo "======= setting up zed =========="
 
-chroot_execute "zfs set canmount=noauto rpool"
+chroot_execute "zfs set canmount=noauto $v_rpool_name"
 
 echo "======= setting mountpoints =========="
 chroot_execute "zfs set mountpoint=legacy $v_bpool_name/BOOT/ubuntu"
