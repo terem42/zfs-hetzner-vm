@@ -754,7 +754,6 @@ done
 
 if [[ $v_encrypt_rpool == "1" ]]; then 
   echo "=========set up dropbear=============="
-
   chroot_execute "apt install --yes dropbear-initramfs"
   
   mkdir -p "$c_zfs_mount_dir/etc/dropbear/initramfs"
