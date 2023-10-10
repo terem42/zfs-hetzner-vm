@@ -845,7 +845,7 @@ chroot_execute "update-grub"
 
 echo "======= setting up zed =========="
 if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "zfs set canmount=noauto rpool"
+  chroot_execute "zfs set canmount=noauto $v_rpool_name"
 else
   initial_load_debian_zed_cache
 fi
