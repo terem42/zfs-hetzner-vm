@@ -752,7 +752,7 @@ for ((i = 1; i < ${#v_selected_disks[@]}; i++)); do
   dd if="${v_selected_disks[0]}-part1" of="${v_selected_disks[i]}-part1"
 done
 
-if [[ $v_encrypt_rpool == "1" ]]; then 
+if [[ $v_encrypt_rpool == "1" ]]; then
   echo "=========set up dropbear=============="
   chroot_execute "apt install --yes dropbear-initramfs"
   
