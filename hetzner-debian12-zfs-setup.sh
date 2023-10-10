@@ -139,20 +139,20 @@ function check_prerequisites {
 
 function initial_load_debian_zed_cache {
   chroot_execute "mkdir /etc/zfs/zfs-list.cache"
-  chroot_execute "touch /etc/zfs/zfs-list.cache/rpool"
+  chroot_execute "touch /etc/zfs/zfs-list.cache/$v_rpool_name"
   chroot_execute "ln -sf /usr/lib/zfs-linux/zed.d/history_event-zfs-list-cacher.sh /etc/zfs/zed.d/"
 
   chroot_execute "zed -F &"
 
   local success=0
 
-  if [[ ! -e /mnt/etc/zfs/zfs-list.cache/rpool ]] || [[ -e /mnt/etc/zfs/zfs-list.cache/rpool && (( $(find /mnt/etc/zfs/zfs-list.cache/rpool -type f -printf '%s' 2> /dev/null) == 0 )) ]]; then  
-    chroot_execute "zfs set canmount=noauto rpool"
+  if [[ ! -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" ]] || [[ -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" && (( $(find "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" -type f -printf '%s' 2> /dev/null) == 0 )) ]]; then  
+    chroot_execute "zfs set canmount=noauto $v_rpool_name"
 
     SECONDS=0
 
     while (( SECONDS++ <= 120 )); do
-      if [[ -e /mnt/etc/zfs/zfs-list.cache/rpool ]] && (( $(find /mnt/etc/zfs/zfs-list.cache/rpool -type f -printf '%s' 2> /dev/null) > 0 )); then
+      if [[ -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" ]] && (( $(find "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" -type f -printf '%s' 2> /dev/null) > 0 )); then
         success=1
         break
       else
@@ -170,7 +170,7 @@ function initial_load_debian_zed_cache {
 
   chroot_execute "pkill zed"
 
-  sed -Ei 's|/mnt/?|/|g' /mnt/etc/zfs/zfs-list.cache/rpool
+  sed -Ei "s|/$c_zfs_mount_dir/?|/|g" "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name"
 }
 
 function find_suitable_disks {
@@ -630,7 +630,7 @@ CONF
 
 ip6addr_prefix=$(ip -6 a s | grep -E "inet6.+global" | sed -nE 's/.+inet6\s(([0-9a-z]{1,4}:){4,4}).+/\1/p' | head -n 1)
 
-cat <<CONF > /mnt/etc/systemd/network/10-eth0.network
+cat <<CONF > "$c_zfs_mount_dir/etc/systemd/network/10-eth0.network"
 [Match]
 Name=eth0
 
@@ -746,7 +746,7 @@ chroot_execute "echo root:$(printf "%q" "$v_root_password") | chpasswd"
 
 echo "======= setting up zfs cache =========="
 
-cp /etc/zpool.cache /mnt/etc/zfs/zpool.cache
+cp /etc/zpool.cache "$c_zfs_mount_dir/etc/zfs/zpool.cache"
 
 echo "========setting up zfs module parameters========"
 chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024)) >> /etc/modprobe.d/zfs.conf"
