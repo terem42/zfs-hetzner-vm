@@ -138,20 +138,20 @@ function check_prerequisites {
 
 function initial_load_debian_zed_cache {
   chroot_execute "mkdir /etc/zfs/zfs-list.cache"
-  chroot_execute "touch /etc/zfs/zfs-list.cache/rpool"
+  chroot_execute "touch /etc/zfs/zfs-list.cache/$v_rpool_name"
   chroot_execute "ln -sf /usr/lib/zfs-linux/zed.d/history_event-zfs-list-cacher.sh /etc/zfs/zed.d/"
 
   chroot_execute "zed -F &"
 
   local success=0
 
-  if [[ ! -e /mnt/etc/zfs/zfs-list.cache/rpool ]] || [[ -e /mnt/etc/zfs/zfs-list.cache/rpool && (( $(find /mnt/etc/zfs/zfs-list.cache/rpool -type f -printf '%s' 2> /dev/null) == 0 )) ]]; then
-    chroot_execute "zfs set canmount=noauto rpool"
+  if [[ ! -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" ]] || [[ -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" && (( $(find "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" -type f -printf '%s' 2> /dev/null) == 0 )) ]]; then  
+    chroot_execute "zfs set canmount=noauto $v_rpool_name"
 
     SECONDS=0
 
-    while (( SECONDS++ <= 300 )); do
-      if [[ -e /mnt/etc/zfs/zfs-list.cache/rpool ]] && (( $(find /mnt/etc/zfs/zfs-list.cache/rpool -type f -printf '%s' 2> /dev/null) > 0 )); then
+    while (( SECONDS++ <= 120 )); do
+      if [[ -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" ]] && (( $(find "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" -type f -printf '%s' 2> /dev/null) > 0 )); then
         success=1
         break
       else
@@ -169,7 +169,7 @@ function initial_load_debian_zed_cache {
 
   chroot_execute "pkill zed"
 
-  sed -Ei 's|/mnt/?|/|g' /mnt/etc/zfs/zfs-list.cache/rpool
+  sed -Ei "s|/$c_zfs_mount_dir/?|/|g" "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name"
 }
 
 function find_suitable_disks {
