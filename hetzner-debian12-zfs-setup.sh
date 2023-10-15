@@ -721,7 +721,7 @@ if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "wget -O - https://terem42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
   chroot_execute "add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'"
   chroot_execute "apt update"
-  chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
+  chroot_execute "apt install -t zfs-debian-experimental --yes openzfs-zfs-initramfs openzfs-zfs-dkms openzfs-zfsutils openzfs-zfs-zed"
 else
   chroot_execute "apt install -t bookworm-backports --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
