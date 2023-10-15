@@ -737,7 +737,6 @@ chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024))
 
 echo "======= setting up grub =========="
 chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-legacy"
 chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
 chroot_execute "grub-install --recheck ${v_selected_disks[0]}"
 
