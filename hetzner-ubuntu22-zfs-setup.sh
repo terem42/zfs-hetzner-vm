@@ -685,7 +685,7 @@ chroot_execute "rm -f /etc/localtime /etc/timezone"
 chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
 
 echo "======= installing latest kernel============="
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers${v_kernel_variant} linux-image${v_kernel_variant}"
+chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-image-generic linux-headers-generic"
 if [[ $v_kernel_variant == "-virtual" ]]; then
   # linux-image-extra is only available for virtual hosts
   chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-image-extra-virtual"
@@ -737,7 +737,7 @@ chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024))
 
 echo "======= setting up grub =========="
 chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc linux-image-generic"
+chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
 chroot_execute "grub-install --recheck ${v_selected_disks[0]}"
 
 chroot_execute "sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/g' /etc/default/grub"
