@@ -555,6 +555,7 @@ echo "======= create zfs pools and datasets =========="
 zpool create \
   $v_bpool_tweaks -O canmount=off -O devices=off \
   -o cachefile=/etc/zpool.cache \
+  -o compatibility=grub2 \
   -O mountpoint=/boot -R $c_zfs_mount_dir -f \
   $v_bpool_name $pools_mirror_option "${bpool_disks_partitions[@]}"
 
