@@ -49,6 +49,7 @@ c_log_dir=$(dirname "$(mktemp)")/zfs-hetzner-vm
 c_install_log=$c_log_dir/install.log
 c_lsb_release_log=$c_log_dir/lsb_release.log
 c_disks_log=$c_log_dir/disks.log
+c_efimode_enabled="$(if [[ -d /sys/firmware/efi/efivars ]]; then echo 1; else echo 0; fi)"
 
 function activate_debug {
   mkdir -p "$c_log_dir"
@@ -522,7 +523,11 @@ echo "======= partitioning the disk =========="
 
   for selected_disk in "${v_selected_disks[@]}"; do
     wipefs --all --force "$selected_disk"
-    sgdisk -a1 -n1:24K:+1000K            -t1:EF02 "$selected_disk"
+    if (( c_efimode_enabled == 1 )); then
+      sgdisk -a1 -n1:24K:+1G            -t1:EF00 "$selected_disk" # EFI partition
+    else
+      sgdisk -a1 -n1:24K:+1000K            -t1:EF02 "$selected_disk"
+    fi
     sgdisk -n2:0:+2G                   -t2:BF01 "$selected_disk" # Boot pool
     sgdisk -n3:0:"$tail_space_parameter" -t3:BF01 "$selected_disk" # Root pool
   done
@@ -553,8 +558,22 @@ echo "======= create zfs pools and datasets =========="
 
 # shellcheck disable=SC2086
 zpool create \
-  $v_bpool_tweaks -O canmount=off -O devices=off \
   -o cachefile=/etc/zpool.cache \
+  -o ashift=12 -d \
+  -o feature@async_destroy=enabled \
+  -o feature@bookmarks=enabled \
+  -o feature@embedded_data=enabled \
+  -o feature@empty_bpobj=enabled \
+  -o feature@enabled_txg=enabled \
+  -o feature@extensible_dataset=enabled \
+  -o feature@filesystem_limits=enabled \
+  -o feature@hole_birth=enabled \
+  -o feature@large_blocks=enabled \
+  -o feature@lz4_compress=enabled \
+  -o feature@spacemap_histogram=enabled \
+  -o feature@zpool_checkpoint=enabled \
+  -O acltype=posixacl -O canmount=off -O compression=lz4 \
+  -O devices=off -O normalization=formD -O relatime=on -O xattr=sa \
   -O mountpoint=/boot -R $c_zfs_mount_dir -f \
   $v_bpool_name $pools_mirror_option "${bpool_disks_partitions[@]}"
 
@@ -604,6 +623,16 @@ if [[ $v_swap_size -gt 0 ]]; then
   udevadm settle
 
   mkswap -f "/dev/zvol/$v_rpool_name/swap"
+fi
+
+if (( c_efimode_enabled == 1 )); then
+echo "======= create filesystem on EFI partition(s) =========="
+
+  for selected_disk in "${v_selected_disks[@]}"; do
+    mkfs.fat -F32 "${selected_disk}-part1"
+  done
+  mkdir -p "$c_zfs_mount_dir/boot/efi"
+  mount "${v_selected_disks[0]}-part1" "$c_zfs_mount_dir/boot/efi"
 fi
 
 echo "======= setting up initial system packages =========="
@@ -694,7 +723,6 @@ console-setup   console-setup/fontsize-text47   select  8x16
 console-setup   console-setup/codesetcode       string  Lat15
 tzdata tzdata/Areas select Europe
 tzdata tzdata/Zones/Europe select Vienna
-grub-pc grub-pc/install_devices_empty   boolean true
 CONF'
 
 chroot_execute "dpkg-reconfigure locales -f noninteractive"
@@ -752,12 +780,22 @@ echo "========setting up zfs module parameters========"
 chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024)) >> /etc/modprobe.d/zfs.conf"
 
 echo "======= setting up grub =========="
-chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-legacy"
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
-for disk in ${v_selected_disks[@]}; do
-  chroot_execute "grub-install --recheck $disk"
-done
+if (( c_efimode_enabled == 1 )); then
+  chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-efi-amd64"
+else
+  chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
+  chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-legacy"
+  chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
+fi
+
+if (( c_efimode_enabled == 1 )); then
+  #chroot_execute grub-probe /boot
+  chroot_execute grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --recheck
+else
+  for disk in ${v_selected_disks[@]}; do
+    chroot_execute "grub-install --recheck $disk"
+  done
+fi
 
 chroot_execute "sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/g' /etc/default/grub"
 chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"net.ifnames=0\"|' /etc/default/grub"
@@ -855,6 +893,10 @@ else
 fi
 
 echo "======= setting mountpoints =========="
+if (( c_efimode_enabled == 1 )); then
+  umount "$c_zfs_mount_dir/boot/efi"
+fi
+
 chroot_execute "zfs set mountpoint=legacy $v_bpool_name/BOOT/debian"
 chroot_execute "echo $v_bpool_name/BOOT/debian /boot zfs nodev,relatime,x-systemd.requires=zfs-mount.service,x-systemd.device-timeout=10 0 0 > /etc/fstab"
 
