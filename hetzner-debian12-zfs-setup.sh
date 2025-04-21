@@ -400,7 +400,7 @@ function determine_kernel_variant {
 }
 
 function chroot_execute {
-  chroot $c_zfs_mount_dir bash -c "$1"
+  chroot $c_zfs_mount_dir bash -c "DEBIAN_FRONTEND=noninteractive $1"
 }
 
 function unmount_and_export_fs {
@@ -753,8 +753,8 @@ chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024))
 
 echo "======= setting up grub =========="
 chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-legacy"
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
+chroot_execute "apt install --yes grub-legacy"
+chroot_execute "apt install --yes grub-pc"
 for disk in ${v_selected_disks[@]}; do
   chroot_execute "grub-install --recheck $disk"
 done
@@ -806,7 +806,7 @@ mkdir -p "$c_zfs_mount_dir/root/.ssh/"
 cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 
 echo "========running packages upgrade and autoremove==========="
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt upgrade --yes"
+chroot_execute "apt upgrade --yes"
 chroot_execute "apt purge cryptsetup* --yes"
 
 echo "===========add static route to initramfs via hook to add default routes for Hetzner due to Debian/Ubuntu initramfs DHCP bug ========="

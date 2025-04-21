@@ -366,7 +366,7 @@ function determine_kernel_variant {
 }
 
 function chroot_execute {
-  chroot $c_zfs_mount_dir bash -c "$1"
+  chroot $c_zfs_mount_dir bash -c "DEBIAN_FRONTEND=noninteractive $1"
 }
 
 function unmount_and_export_fs {
@@ -685,10 +685,10 @@ chroot_execute "rm -f /etc/localtime /etc/timezone"
 chroot_execute "dpkg-reconfigure tzdata -f noninteractive "
 
 echo "======= installing latest kernel============="
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-headers${v_kernel_variant} linux-image${v_kernel_variant}"
+chroot_execute "apt install --yes linux-headers${v_kernel_variant} linux-image${v_kernel_variant}"
 if [[ $v_kernel_variant == "-virtual" ]]; then
   # linux-image-extra is only available for virtual hosts
-  chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes linux-image-extra-virtual"
+  chroot_execute "apt install --yes linux-image-extra-virtual"
 fi
 
 
@@ -737,7 +737,7 @@ chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024))
 
 echo "======= setting up grub =========="
 chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
-chroot_execute "DEBIAN_FRONTEND=noninteractive apt install --yes grub-pc"
+chroot_execute "apt install --yes grub-pc"
 for disk in ${v_selected_disks[@]}; do
   chroot_execute "grub-install $disk"
 done
