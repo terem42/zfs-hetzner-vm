@@ -806,7 +806,7 @@ mkdir -p "$c_zfs_mount_dir/root/.ssh/"
 cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
 
 echo "========running packages upgrade and autoremove==========="
-chroot_execute "apt upgrade --yes"
+chroot_execute "DEBIAN_FRONTEND=noninteractive apt upgrade --yes"
 chroot_execute "apt purge cryptsetup* --yes"
 
 echo "===========add static route to initramfs via hook to add default routes for Hetzner due to Debian/Ubuntu initramfs DHCP bug ========="
