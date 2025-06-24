@@ -18,6 +18,7 @@ set -o pipefail
 set -o nounset
 
 export TMPDIR=/tmp
+export DEBIAN_FRONTEND=noninteractive
 
 # Variables
 v_bpool_name=
@@ -491,8 +492,12 @@ clear
 
 echo "===========remove unused kernels in rescue system========="
 for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | cut -s -d "/" -f 4); do
-  apt purge --yes "linux-headers-$kver"
-  apt purge --yes "linux-image-$kver"
+  if dpkg -l "linux-headers-$kver" 2>/dev/null | grep -q "^ii"; then
+    apt purge --yes "linux-headers-$kver"
+  fi
+  if dpkg -l "linux-image-$kver" 2>/dev/null | grep -q "^ii"; then
+    apt purge --yes "linux-image-$kver"
+  fi
 done
 
 echo "======= installing zfs on rescue system =========="
@@ -506,7 +511,7 @@ echo "======= installing zfs on rescue system =========="
   echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
   echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
   apt update  
-  apt install -t testing --yes zfs-dkms zfsutils-linux
+  apt install -t testing --yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" zfs-dkms zfsutils-linux
   rm /etc/apt/sources.list.d/bookworm-testing.list
   rm /etc/apt/preferences.d/90_zfs
   apt update
@@ -558,6 +563,7 @@ echo "======= create zfs pools and datasets =========="
 
 # shellcheck disable=SC2086
 zpool create \
+  -m none \
   -o cachefile=/etc/zpool.cache \
   -o compatibility=grub2 \
   -O mountpoint=/boot -R $c_zfs_mount_dir -f \
@@ -565,6 +571,7 @@ zpool create \
 
 # shellcheck disable=SC2086
 echo -n "$v_passphrase" | zpool create \
+  -m none \
   $v_rpool_tweaks \
   -o cachefile=/etc/zpool.cache \
   "${encryption_options[@]}" \
