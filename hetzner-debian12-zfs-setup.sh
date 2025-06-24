@@ -18,6 +18,7 @@ set -o pipefail
 set -o nounset
 
 export TMPDIR=/tmp
+export DEBIAN_FRONTEND=noninteractive
 
 # Variables
 v_bpool_name=
@@ -510,7 +511,7 @@ echo "======= installing zfs on rescue system =========="
   echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
   echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
   apt update  
-  apt install -t testing --yes zfs-dkms zfsutils-linux
+  apt install -t testing --yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" zfs-dkms zfsutils-linux
   rm /etc/apt/sources.list.d/bookworm-testing.list
   rm /etc/apt/preferences.d/90_zfs
   apt update
