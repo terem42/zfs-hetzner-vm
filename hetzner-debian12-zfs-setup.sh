@@ -563,6 +563,7 @@ echo "======= create zfs pools and datasets =========="
 
 # shellcheck disable=SC2086
 zpool create \
+  -m none \
   -o cachefile=/etc/zpool.cache \
   -o compatibility=grub2 \
   -O mountpoint=/boot -R $c_zfs_mount_dir -f \
@@ -570,6 +571,7 @@ zpool create \
 
 # shellcheck disable=SC2086
 echo -n "$v_passphrase" | zpool create \
+  -m none \
   $v_rpool_tweaks \
   -o cachefile=/etc/zpool.cache \
   "${encryption_options[@]}" \
