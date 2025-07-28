@@ -182,35 +182,38 @@ function find_suitable_disks {
   udevadm trigger
 
   # shellcheck disable=SC2012
-  ls -l /dev/disk/by-id | tail -n +2 | perl -lane 'print "@F[8..10]"' > "$c_disks_log"
+  ls -l /dev/disk/by-path | tail -n +2 | perl -lane 'print "@F[8..10]"' > "$c_disks_log"
+  # Use by-path to support all disk types including virtio, ata, nvme, scsi
 
   local candidate_disk_ids
   local mounted_devices
 
-  candidate_disk_ids=$(find /dev/disk/by-id -regextype awk -regex '.+/(ata|nvme|scsi)-.+' -not -regex '.+-part[0-9]+$' | sort)
+  # Get unique real device paths (automatic deduplication)
+  candidate_real_devices=$(find /dev/disk/by-path -type l -not -regex '.+-part[0-9]+$' | xargs -I {} readlink -f {} | sort | uniq)
   mounted_devices="$(df | awk 'BEGIN {getline} {print $1}' | xargs -n 1 lsblk -no pkname 2> /dev/null | sort -u || true)"
 
-  while read -r disk_id || [[ -n "$disk_id" ]]; do
+  while read -r real_device || [[ -n "$real_device" ]]; do
     local device_info
+    local block_device_basename
 
-    device_info="$(udevadm info --query=property "$(readlink -f "$disk_id")")"
-    block_device_basename="$(basename "$(readlink -f "$disk_id")")"
+    device_info="$(udevadm info --query=property "$real_device")"
+    block_device_basename="$(basename "$real_device")"
 
     if ! grep -q '^ID_TYPE=cd$' <<< "$device_info"; then
       if ! grep -q "^$block_device_basename\$" <<< "$mounted_devices"; then
-        v_suitable_disks+=("$disk_id")
+        v_suitable_disks+=("$real_device")
       fi
     fi
 
     cat >> "$c_disks_log" << LOG
 
-## DEVICE: $disk_id ################################
+## DEVICE: $real_device ################################
 
-$(udevadm info --query=property "$(readlink -f "$disk_id")")
+$(udevadm info --query=property "$real_device")
 
 LOG
 
-  done < <(echo -n "$candidate_disk_ids")
+  done < <(echo -n "$candidate_real_devices")
 
   if [[ ${#v_suitable_disks[@]} -eq 0 ]]; then
     local dialog_message='No suitable disks have been found!
@@ -544,14 +547,29 @@ echo "======= create zfs pools and datasets =========="
   encryption_options=()
   rpool_disks_partitions=()
   bpool_disks_partitions=()
+  efi_partitions_uuid=()
 
   if [[ $v_encrypt_rpool == "1" ]]; then
     encryption_options=(-O "encryption=aes-256-gcm" -O "keylocation=prompt" -O "keyformat=passphrase")
   fi
 
-  for selected_disk in "${v_selected_disks[@]}"; do
-    rpool_disks_partitions+=("${selected_disk}-part3")
-    bpool_disks_partitions+=("${selected_disk}-part2")
+  # Get partition UUIDs after device settlement (more reliable than hardcoded -partN)
+  for selected_disk in "${v_selected_disks[@]}"; do    
+    # Get PARTUUIDs for each partition type
+    rpool_partuuid=$(lsblk -no PARTUUID "${selected_disk}3" 2>/dev/null | tr -d '\n ')
+    bpool_partuuid=$(lsblk -no PARTUUID "${selected_disk}2" 2>/dev/null | tr -d '\n ')
+    efi_partuuid=$(lsblk -no PARTUUID "${selected_disk}1" 2>/dev/null | tr -d '\n ')
+    
+    # Store UUID-based paths
+    if [[ -n "$rpool_partuuid" ]]; then
+      rpool_disks_partitions+=("/dev/disk/by-partuuid/$rpool_partuuid")
+    fi
+    if [[ -n "$bpool_partuuid" ]]; then
+      bpool_disks_partitions+=("/dev/disk/by-partuuid/$bpool_partuuid")
+    fi
+    if [[ -n "$efi_partuuid" ]]; then
+      efi_partitions_uuid+=("$efi_partuuid")
+    fi
   done
 
   pools_mirror_option=
@@ -621,11 +639,11 @@ fi
 if (( c_efimode_enabled == 1 )); then
 echo "======= create filesystem on EFI partition(s) =========="
 
-  for selected_disk in "${v_selected_disks[@]}"; do
-    mkfs.fat -F32 "${selected_disk}-part1"
+  for efi_partuuid in "${efi_partitions_uuid[@]}"; do
+    mkfs.fat -F32 "/dev/disk/by-partuuid/$efi_partuuid"
   done
   mkdir -p "$c_zfs_mount_dir/boot/efi"
-  mount "${v_selected_disks[0]}-part1" "$c_zfs_mount_dir/boot/efi"
+  mount "/dev/disk/by-partuuid/${efi_partitions_uuid[0]}" "$c_zfs_mount_dir/boot/efi"
 fi
 
 echo "======= setting up initial system packages =========="
@@ -798,8 +816,8 @@ chroot_execute "sed -i 's/quiet//g' /etc/default/grub"
 chroot_execute "sed -i 's/splash//g' /etc/default/grub"
 chroot_execute "echo 'GRUB_DISABLE_OS_PROBER=true'   >> /etc/default/grub"
 
-for ((i = 1; i < ${#v_selected_disks[@]}; i++)); do
-  dd if="${v_selected_disks[0]}-part1" of="${v_selected_disks[i]}-part1"
+for ((i = 1; i < ${#efi_partitions_uuid[@]}; i++)); do
+  dd if="/dev/disk/by-partuuid/${efi_partitions_uuid[0]}" of="/dev/disk/by-partuuid/${efi_partitions_uuid[i]}"
 done
 
 if [[ $v_encrypt_rpool == "1" ]]; then
