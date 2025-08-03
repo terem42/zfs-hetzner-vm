@@ -38,8 +38,11 @@ v_zfs_experimental=
 v_suitable_disks=()
 
 # Constants
+# Debian version - change this to upgrade to a different version
+c_debian_version=bookworm
 c_deb_packages_repo=https://deb.debian.org/debian
 c_deb_security_repo=https://deb.debian.org/debian-security
+
 
 c_default_zfs_arc_max_mb=250
 c_default_bpool_tweaks="-o ashift=12 -O compression=lz4"
@@ -408,6 +411,26 @@ function chroot_execute {
   chroot $c_zfs_mount_dir bash -c "DEBIAN_FRONTEND=noninteractive $1"
 }
 
+function setup_apt_sources {
+  # Configure APT sources for the target system
+  # This function can be easily modified to support different Debian versions
+  # Usage: setup_apt_sources <sources_list_path>
+  
+  if [[ $# -ne 1 ]]; then
+    echo "Error: setup_apt_sources requires exactly one argument (sources_list_path)"
+    exit 1
+  fi
+  
+  local sources_list_path="$1"
+  
+  cat > "$sources_list_path" <<CONF
+deb $c_deb_packages_repo $c_debian_version main contrib non-free non-free-firmware
+deb $c_deb_packages_repo $c_debian_version-updates main contrib non-free non-free-firmware
+deb $c_deb_security_repo $c_debian_version-security main contrib non-free non-free-firmware
+deb $c_deb_packages_repo $c_debian_version-backports main contrib non-free non-free-firmware
+CONF
+}
+
 function unmount_and_export_fs {
   # shellcheck disable=SC2119
   print_step_info_header
@@ -506,18 +529,27 @@ done
 echo "======= installing zfs on rescue system =========="
 
   echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
-#  echo "y" | zfs
-# linux-headers-generic linux-image-generic
-  apt install --yes software-properties-common dpkg-dev dkms
-  rm -f "$(which zfs)"
-  rm -f "$(which zpool)"
-  echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
-  echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
-  apt update  
-  apt install -t testing --yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" zfs-dkms zfsutils-linux
-  rm /etc/apt/sources.list.d/bookworm-testing.list
-  rm /etc/apt/preferences.d/90_zfs
+# #  echo "y" | zfs
+# # linux-headers-generic linux-image-generic
+#   apt install --yes software-properties-common dpkg-dev dkms
+#   rm -f "$(which zfs)"
+#   rm -f "$(which zpool)"
+#   cat > /etc/apt/sources.list.d/bookworm-testing.list <<CONF
+# deb http://deb.debian.org/debian/ testing main contrib non-free
+# deb http://deb.debian.org/debian/ testing main contrib non-free
+# CONF
+#   cat > /etc/apt/preferences.d/90_zfs <<CONF
+# Package: src:zfs-linux
+# Pin: release n=testing
+# Pin-Priority: 990
+# CONF
+#   apt update  
+#   apt install -t testing --yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" zfs-dkms zfsutils-linux
+#   rm /etc/apt/sources.list.d/bookworm-testing.list
+#   rm /etc/apt/preferences.d/90_zfs
   apt update
+  apt install zfs-dkms zfsutils-linux -y
+
   export PATH=$PATH:/usr/sbin
   zfs --version
 
@@ -647,7 +679,7 @@ echo "======= create filesystem on EFI partition(s) =========="
 fi
 
 echo "======= setting up initial system packages =========="
-debootstrap --arch=amd64 bookworm "$c_zfs_mount_dir" "$c_deb_packages_repo"
+debootstrap --arch=amd64 "$c_debian_version" "$c_zfs_mount_dir" "$c_deb_packages_repo"
 
 zfs set devices=off "$v_rpool_name"
 
@@ -687,12 +719,7 @@ for virtual_fs_dir in proc sys dev; do
 done
 
 echo "======= setting apt repos =========="
-cat > "$c_zfs_mount_dir/etc/apt/sources.list" <<CONF
-deb $c_deb_packages_repo bookworm main contrib non-free non-free-firmware
-deb $c_deb_packages_repo bookworm-updates main contrib non-free non-free-firmware
-deb $c_deb_security_repo bookworm-security main contrib non-free non-free-firmware
-deb $c_deb_packages_repo bookworm-backports main contrib non-free non-free-firmware
-CONF
+setup_apt_sources "$c_zfs_mount_dir/etc/apt/sources.list"
 
 chroot_execute "apt update"
 
@@ -762,7 +789,7 @@ if [[ $v_zfs_experimental == "1" ]]; then
   chroot_execute "apt update"
   chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
 else
-  chroot_execute "apt install -t bookworm-backports --yes zfs-initramfs zfs-dkms zfsutils-linux"
+  chroot_execute "apt install -t $c_debian_version-backports --yes zfs-initramfs zfs-dkms zfsutils-linux"
 fi
 chroot_execute 'cat << DKMS > /etc/dkms/zfs.conf
 # override for /usr/src/zfs-*/dkms.conf:
