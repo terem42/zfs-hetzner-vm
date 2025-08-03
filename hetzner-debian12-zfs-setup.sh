@@ -38,12 +38,6 @@ v_zfs_experimental=
 v_suitable_disks=()
 
 # Constants
-# Debian version - change this to upgrade to a different version
-c_debian_version=bookworm
-c_deb_packages_repo=https://deb.debian.org/debian
-c_deb_security_repo=https://deb.debian.org/debian-security
-
-
 c_default_zfs_arc_max_mb=250
 c_default_bpool_tweaks="-o ashift=12 -O compression=lz4"
 c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=zstd-9 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
@@ -54,6 +48,76 @@ c_install_log=$c_log_dir/install.log
 c_lsb_release_log=$c_log_dir/lsb_release.log
 c_disks_log=$c_log_dir/disks.log
 c_efimode_enabled="$(if [[ -d /sys/firmware/efi/efivars ]]; then echo 1; else echo 0; fi)"
+
+# --begin-- debian distribution related functions
+## --begin-- 1. host part
+function setup_host_apt_sources {
+  # Ensure rescue system has non-free sources for ZFS installation
+  echo "======= setting up host system apt sources =========="
+  
+  if host_codename=$(lsb_release -cs 2>/dev/null); then
+    cat > "/etc/apt/sources.list" <<CONF
+deb https://deb.debian.org/debian $host_codename main contrib non-free non-free-firmware
+deb https://deb.debian.org/debian $host_codename-backports main contrib non-free non-free-firmware
+deb https://deb.debian.org/debian $host_codename-updates main contrib non-free non-free-firmware
+deb https://deb.debian.org/debian-security $host_codename-security main contrib non-free non-free-firmware
+CONF
+    apt update
+  else
+    echo "Error: lsb_release failed"
+    return 1
+  fi
+}
+
+function install_host_zfs {
+  # Install compatible ZFS on host system
+  # This function ensures ZFS version compatibility between host and target
+  # Minimum supported host version: Debian 12 (bookworm)
+  echo "======= installing zfs on host system =========="
+  setup_host_apt_sources || return 1
+
+  if host_version_num=$(lsb_release -rs 2>/dev/null) && [[ "$host_version_num" -ge 12 ]]; then
+    # Set up ZFS installation based on host system
+    echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
+    apt install --yes zfs-dkms zfsutils-linux -y
+    export PATH=$PATH:/usr/sbin
+    zfs --version
+    echo "ZFS installation completed"
+  else
+    echo "Error: Unsupported host system (version $host_version_num)"
+    echo "Minimum supported version: Debian 12 (bookworm)"
+    echo "Please upgrade your host system or use a newer rescue system"
+    return 1
+  fi
+}
+## --end-- 1. host part
+## --begin-- 2. target part
+# Debian version - change this to upgrade to a different version
+c_debian_version=bookworm
+c_deb_packages_repo=https://deb.debian.org/debian
+c_deb_security_repo=https://deb.debian.org/debian-security
+
+function setup_apt_sources {
+  # Configure APT sources for the target system
+  # This function can be easily modified to support different Debian versions
+  # Usage: setup_apt_sources <sources_list_path>
+  
+  if [[ $# -ne 1 ]]; then
+    echo "Error: setup_apt_sources requires exactly one argument (sources_list_path)"
+    exit 1
+  fi
+  
+  local sources_list_path="$1"
+  
+  cat > "$sources_list_path" <<CONF
+deb $c_deb_packages_repo $c_debian_version main contrib non-free non-free-firmware
+deb $c_deb_packages_repo $c_debian_version-updates main contrib non-free non-free-firmware
+deb $c_deb_security_repo $c_debian_version-security main contrib non-free non-free-firmware
+deb $c_deb_packages_repo $c_debian_version-backports main contrib non-free non-free-firmware
+CONF
+}
+## --end-- 2. target part
+# --end-- debian distribution related functions
 
 function activate_debug {
   mkdir -p "$c_log_dir"
@@ -411,25 +475,6 @@ function chroot_execute {
   chroot $c_zfs_mount_dir bash -c "DEBIAN_FRONTEND=noninteractive $1"
 }
 
-function setup_apt_sources {
-  # Configure APT sources for the target system
-  # This function can be easily modified to support different Debian versions
-  # Usage: setup_apt_sources <sources_list_path>
-  
-  if [[ $# -ne 1 ]]; then
-    echo "Error: setup_apt_sources requires exactly one argument (sources_list_path)"
-    exit 1
-  fi
-  
-  local sources_list_path="$1"
-  
-  cat > "$sources_list_path" <<CONF
-deb $c_deb_packages_repo $c_debian_version main contrib non-free non-free-firmware
-deb $c_deb_packages_repo $c_debian_version-updates main contrib non-free non-free-firmware
-deb $c_deb_security_repo $c_debian_version-security main contrib non-free non-free-firmware
-deb $c_deb_packages_repo $c_debian_version-backports main contrib non-free non-free-firmware
-CONF
-}
 
 function unmount_and_export_fs {
   # shellcheck disable=SC2119
@@ -526,32 +571,10 @@ for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | 
   fi
 done
 
-echo "======= installing zfs on rescue system =========="
-
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
-# #  echo "y" | zfs
-# # linux-headers-generic linux-image-generic
-#   apt install --yes software-properties-common dpkg-dev dkms
-#   rm -f "$(which zfs)"
-#   rm -f "$(which zpool)"
-#   cat > /etc/apt/sources.list.d/bookworm-testing.list <<CONF
-# deb http://deb.debian.org/debian/ testing main contrib non-free
-# deb http://deb.debian.org/debian/ testing main contrib non-free
-# CONF
-#   cat > /etc/apt/preferences.d/90_zfs <<CONF
-# Package: src:zfs-linux
-# Pin: release n=testing
-# Pin-Priority: 990
-# CONF
-#   apt update  
-#   apt install -t testing --yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" zfs-dkms zfsutils-linux
-#   rm /etc/apt/sources.list.d/bookworm-testing.list
-#   rm /etc/apt/preferences.d/90_zfs
-  apt update
-  apt install zfs-dkms zfsutils-linux -y
-
-  export PATH=$PATH:/usr/sbin
-  zfs --version
+install_host_zfs || {
+  echo "Error: Failed to install ZFS on host system"
+  exit 1
+}
 
 echo "======= partitioning the disk =========="
 
