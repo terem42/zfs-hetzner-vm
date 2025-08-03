@@ -59,6 +59,13 @@ c_disks_log=$c_log_dir/disks.log
 c_efimode_enabled="$(if [[ -d /sys/firmware/efi/efivars ]]; then echo 1; else echo 0; fi)"
 
 # --begin-- debian distribution related functions
+# Constants (can be overridden by environment variables)
+# Debian version - change this to upgrade to a different version (e.g., trixie for Debian 13)
+c_debian_version=${DEBIAN_VERSION:-bookworm}
+# Mirror repositories - can use 163 mirror: http://mirrors.163.com/debian
+c_deb_packages_repo=${DEB_PACKAGES_REPO:-https://deb.debian.org/debian}
+c_deb_security_repo=${DEB_SECURITY_REPO:-https://deb.debian.org/debian-security}
+
 ## --begin-- 1. host part
 function setup_host_apt_sources {
   # Ensure rescue system has non-free sources for ZFS installation
@@ -66,10 +73,10 @@ function setup_host_apt_sources {
   
   if host_codename=$(lsb_release -cs 2>/dev/null); then
     cat > "/etc/apt/sources.list" <<CONF
-deb https://deb.debian.org/debian $host_codename main contrib non-free non-free-firmware
-deb https://deb.debian.org/debian $host_codename-backports main contrib non-free non-free-firmware
-deb https://deb.debian.org/debian $host_codename-updates main contrib non-free non-free-firmware
-deb https://deb.debian.org/debian-security $host_codename-security main contrib non-free non-free-firmware
+deb $c_deb_packages_repo $host_codename main contrib non-free non-free-firmware
+deb $c_deb_packages_repo $host_codename-backports main contrib non-free non-free-firmware
+deb $c_deb_packages_repo $host_codename-updates main contrib non-free non-free-firmware
+deb $c_deb_security_repo $host_codename-security main contrib non-free non-free-firmware
 CONF
     apt update
   else
@@ -101,11 +108,6 @@ function install_host_zfs {
 }
 ## --end-- 1. host part
 ## --begin-- 2. target part
-# Debian version - change this to upgrade to a different version
-c_debian_version=bookworm
-c_deb_packages_repo=https://deb.debian.org/debian
-c_deb_security_repo=https://deb.debian.org/debian-security
-
 function setup_apt_sources {
   # Configure APT sources for the target system
   # This function can be easily modified to support different Debian versions
