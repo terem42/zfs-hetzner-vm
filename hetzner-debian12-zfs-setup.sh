@@ -547,7 +547,7 @@ echo "======= create zfs pools and datasets =========="
   encryption_options=()
   rpool_disks_partitions=()
   bpool_disks_partitions=()
-  efi_partitions_uuid=()
+  efi_disks_partitions=()
 
   if [[ $v_encrypt_rpool == "1" ]]; then
     encryption_options=(-O "encryption=aes-256-gcm" -O "keylocation=prompt" -O "keyformat=passphrase")
@@ -568,7 +568,7 @@ echo "======= create zfs pools and datasets =========="
       bpool_disks_partitions+=("/dev/disk/by-partuuid/$bpool_partuuid")
     fi
     if [[ -n "$efi_partuuid" ]]; then
-      efi_partitions_uuid+=("$efi_partuuid")
+      efi_disks_partitions+=("$efi_partuuid")
     fi
   done
 
@@ -639,11 +639,11 @@ fi
 if (( c_efimode_enabled == 1 )); then
 echo "======= create filesystem on EFI partition(s) =========="
 
-  for efi_partuuid in "${efi_partitions_uuid[@]}"; do
+  for efi_partuuid in "${efi_disks_partitions[@]}"; do
     mkfs.fat -F32 "/dev/disk/by-partuuid/$efi_partuuid"
   done
   mkdir -p "$c_zfs_mount_dir/boot/efi"
-  mount "/dev/disk/by-partuuid/${efi_partitions_uuid[0]}" "$c_zfs_mount_dir/boot/efi"
+  mount "/dev/disk/by-partuuid/${efi_disks_partitions[0]}" "$c_zfs_mount_dir/boot/efi"
 fi
 
 echo "======= setting up initial system packages =========="
@@ -816,8 +816,8 @@ chroot_execute "sed -i 's/quiet//g' /etc/default/grub"
 chroot_execute "sed -i 's/splash//g' /etc/default/grub"
 chroot_execute "echo 'GRUB_DISABLE_OS_PROBER=true'   >> /etc/default/grub"
 
-for ((i = 1; i < ${#efi_partitions_uuid[@]}; i++)); do
-  dd if="/dev/disk/by-partuuid/${efi_partitions_uuid[0]}" of="/dev/disk/by-partuuid/${efi_partitions_uuid[i]}"
+for ((i = 1; i < ${#efi_disks_partitions[@]}; i++)); do
+  dd if="/dev/disk/by-partuuid/${efi_disks_partitions[0]}" of="/dev/disk/by-partuuid/${efi_disks_partitions[i]}"
 done
 
 if [[ $v_encrypt_rpool == "1" ]]; then
