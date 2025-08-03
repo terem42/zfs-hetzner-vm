@@ -38,7 +38,16 @@ v_zfs_experimental=
 v_suitable_disks=()
 
 # Constants
-c_default_zfs_arc_max_mb=250
+c_default_zfs_arc_max_mb=$(
+  total_mem_mb=$(free -m | awk 'NR==2{print $2}' 2>/dev/null || echo 1024)
+  if [[ $total_mem_mb -le 1024 ]]; then
+    echo 256
+  elif [[ $total_mem_mb -le 2048 ]]; then
+    echo 512
+  else
+    echo $((total_mem_mb / 4))
+  fi
+)
 c_default_bpool_tweaks="-o ashift=12 -O compression=lz4"
 c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=zstd-9 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
 c_default_hostname=terem
