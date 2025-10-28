@@ -75,3 +75,5 @@ Upon succesfull run, the script will reboot system, and you will be able to logi
 
 Please note that the drives you intend to format can not be in use,
 you can execute `mdadm --stop --scan` before running the script to halt default software raid operations.
+
+hetzner openzfs_install
