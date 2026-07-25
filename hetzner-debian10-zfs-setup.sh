@@ -751,7 +751,7 @@ chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024))
 echo "======= setting up grub =========="
 chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
 chroot_execute "apt install --yes grub-pc"
-for disk in ${v_selected_disks[@]}; do
+for disk in "${v_selected_disks[@]}"; do
   chroot_execute "grub-install $disk"
 done
 
