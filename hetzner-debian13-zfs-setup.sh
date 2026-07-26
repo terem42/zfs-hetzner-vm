@@ -22,11 +22,14 @@ SYSTEM_HOSTNAME=""
 ROOT_PASSWORD=""
 ZFS_POOL=""
 ZFS_ARC_MAX_MB=""
+ZFS_ENCRYPT=false
+ZFS_PASSPHRASE=""
+ZFS_KEYFILE="/etc/zfs/zroot.key"
 export DEBIAN_CODENAME="trixie"   # Debian 13, exported so chroot shells see it
 TARGET="/mnt/debian"
 
-ZBM_BIOS_URL="https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-release-x86_64-v3.0.1-linux6.1.tar.gz"
-ZBM_EFI_URL="https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.0.1/zfsbootmenu-release-x86_64-v3.0.1-linux6.1.EFI"
+ZBM_BIOS_URL="https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.1.0/zfsbootmenu-release-x86_64-v3.1.0-linux6.12.tar.gz"
+ZBM_EFI_URL="https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.1.0/zfsbootmenu-release-x86_64-v3.1.0-linux6.12.EFI"
 
 MAIN_BOOT="/main_boot"
 
@@ -193,6 +196,51 @@ function get_root_password {
     done
 }
 
+function get_encryption {
+    if ! whiptail \
+        --title " ZFS Native Encryption " \
+        --defaultno \
+        --yesno "\nEncrypt the root pool with ZFS native encryption?\n\nAt every boot you will need to enter the passphrase at the ZFSBootMenu prompt via the Hetzner server console." \
+        13 60; then
+        return
+    fi
+    ZFS_ENCRYPT=true
+
+    local pass1 pass2
+    while true; do
+        if ! pass1=$(whiptail \
+            --title " Pool Passphrase " \
+            --passwordbox "\nEnter the pool encryption passphrase (min 8 characters, input hidden):" \
+            10 60 \
+            3>&1 1>&2 2>&3); then
+            user_cancelled
+        fi
+
+        if ! pass2=$(whiptail \
+            --title " Confirm Pool Passphrase " \
+            --passwordbox "\nConfirm the passphrase (input hidden):" \
+            10 60 \
+            3>&1 1>&2 2>&3); then
+            user_cancelled
+        fi
+
+        if [ "$pass1" != "$pass2" ]; then
+            whiptail \
+                --title " Passphrase Mismatch " \
+                --msgbox "Passphrases do not match. Please try again." \
+                10 50
+        elif [ ${#pass1} -lt 8 ]; then
+            whiptail \
+                --title " Passphrase Too Short " \
+                --msgbox "ZFS requires a passphrase of at least 8 characters." \
+                10 50
+        else
+            ZFS_PASSPHRASE="$pass1"
+            break
+        fi
+    done
+}
+
 function get_arc_size {
     local total_mb default_mb
     total_mb=$(free -m | awk '/^Mem:/ {print $2}')
@@ -226,6 +274,7 @@ function show_summary_and_confirm {
 
 Hostname: $SYSTEM_HOSTNAME
 ZFS Pool: $ZFS_POOL
+Encryption: $([ "$ZFS_ENCRYPT" = true ] && echo "enabled (aes-256-gcm)" || echo "disabled")
 ZFS ARC max: $ZFS_ARC_MAX_MB MiB
 Debian Version: $DEBIAN_CODENAME (13)
 Target: $TARGET
@@ -262,6 +311,7 @@ function get_user_input {
     get_hostname
     get_zfs_pool_name
     get_root_password
+    get_encryption
     get_arc_size
 }
 
@@ -363,7 +413,10 @@ function install_zfs_on_rescue_system {
     rescue_codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
     echo "deb ${MIRROR_SITE}/debian/packages ${rescue_codename}-backports main contrib" > /etc/apt/sources.list.d/backports.list
     apt update
-    apt install -y -t "${rescue_codename}-backports" zfsutils-linux
+    # --no-install-recommends: zfsutils-linux recommends zfs-dkms, whose dkms
+    # dependency recommends linux-headers-amd64, dragging in a full backports
+    # kernel and a doomed DKMS build that can exhaust the RAM-backed rescue root
+    apt install -y --no-install-recommends -t "${rescue_codename}-backports" zfsutils-linux
 
     # The Hetzner rescue system ships static zfs/zpool binaries in /usr/local/sbin
     # that shadow the packaged ones; remove only those known copies
@@ -374,7 +427,7 @@ function install_zfs_on_rescue_system {
     # The rescue kernel normally ships the ZFS module; build it via DKMS if missing
     if ! modprobe zfs; then
         echo "ZFS module not available in rescue kernel, building via DKMS..."
-        apt install -y -t "${rescue_codename}-backports" "linux-headers-$(uname -r)" zfs-dkms
+        apt install -y --no-install-recommends -t "${rescue_codename}-backports" "linux-headers-$(uname -r)" zfs-dkms
         modprobe zfs
     fi
 }
@@ -425,6 +478,18 @@ function create_zfs_pool {
     echo "======= Creating ZFS pool =========="
     mkdir -p "$TARGET"
 
+    # ZFS native encryption per the ZFSBootMenu docs: the passphrase lives in a
+    # key file that must exist before zpool create. ZFSBootMenu prompts for the
+    # passphrase at boot; the key file is embedded in the OS initramfs so the
+    # second unlock during boot needs no prompt.
+    local encryption_options=()
+    if [ "$ZFS_ENCRYPT" = true ]; then
+        mkdir -p /etc/zfs
+        printf '%s\n' "$ZFS_PASSPHRASE" > "$ZFS_KEYFILE"
+        chmod 000 "$ZFS_KEYFILE"
+        encryption_options=(-O encryption=aes-256-gcm -O keyformat=passphrase -O keylocation="file://$ZFS_KEYFILE")
+    fi
+
     # -R "$TARGET" (altroot) prefixes all mountpoints with $TARGET for the
     # lifetime of this import only, so datasets can be created with their final
     # mountpoints right away; altroot is never written to the pool
@@ -436,6 +501,7 @@ function create_zfs_pool {
     -O acltype=posixacl \
     -O xattr=sa \
     -O mountpoint=none \
+    "${encryption_options[@]}" \
     "$ZFS_POOL" "$ZFS_PART"
 
     zfs create -o mountpoint=none   "$ZFS_POOL/ROOT"
@@ -443,6 +509,12 @@ function create_zfs_pool {
 
     echo "======= Assigning $ZFS_POOL/ROOT/debian dataset as bootable =========="
     zpool set bootfs="$ZFS_POOL/ROOT/debian" "$ZFS_POOL"
+
+    if [ "$ZFS_ENCRYPT" = true ]; then
+        # Tell ZFSBootMenu where the key file lives so it caches the key after
+        # the initial unlock instead of re-prompting for every operation
+        zfs set org.zfsbootmenu:keysource="$ZFS_POOL/ROOT/debian" "$ZFS_POOL"
+    fi
 }
 
 function create_additional_zfs_datasets {
@@ -504,6 +576,21 @@ function bootstrap_debian_system {
     # install (restored by restore_target_resolv_conf before reboot)
     rm -f "$TARGET/etc/resolv.conf"
     cp /etc/resolv.conf "$TARGET/etc/resolv.conf"
+}
+
+function stage_encryption_key {
+    if [ "$ZFS_ENCRYPT" != true ]; then
+        return
+    fi
+    echo "======= Staging encryption key into target =========="
+    # zfs-initramfs automatically embeds key files referenced by keylocation
+    # (under /etc/zfs) into the initramfs; UMASK=0077 keeps that initramfs
+    # from being world-readable (per the ZFSBootMenu Debian guide)
+    mkdir -p "$TARGET/etc/zfs"
+    cp "$ZFS_KEYFILE" "$TARGET$ZFS_KEYFILE"
+    chmod 000 "$TARGET$ZFS_KEYFILE"
+    mkdir -p "$TARGET/etc/initramfs-tools/conf.d"
+    echo "UMASK=0077" > "$TARGET/etc/initramfs-tools/conf.d/umask.conf"
 }
 
 function configure_zfs_arc {
@@ -1012,6 +1099,14 @@ function show_final_instructions {
     echo "  Boot Mode: $([ "$EFI_MODE" = true ] && echo "EFI" || echo "BIOS")"
     echo "  Debian Version: $DEBIAN_CODENAME"
     echo "  Networking: systemd-networkd + systemd-resolved"
+    if [ "$ZFS_ENCRYPT" = true ]; then
+        echo "  Encryption: enabled (aes-256-gcm)"
+        echo ""
+        echo "IMPORTANT: at every boot, open the server console in the"
+        echo "Hetzner UI and enter the pool passphrase at the ZFSBootMenu"
+        echo "prompt. Remote SSH unlock requires a custom-built ZFSBootMenu"
+        echo "image with dropbear and is not part of this setup."
+    fi
     echo ""
     echo "=========================================="
     echo "Rebooting..."
@@ -1045,6 +1140,7 @@ function main {
 
     # System installation
     bootstrap_debian_system
+    stage_encryption_key
     configure_zfs_arc
     setup_chroot_environment
     configure_basic_system
