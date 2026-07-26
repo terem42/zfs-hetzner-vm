@@ -4,914 +4,1170 @@
 (c) Andrey Prokopenko job@terem.fr
 fully automatic script to install Debian 12 with ZFS root on Hetzner VPS
 WARNING: all data on the disk will be destroyed
-How to use: add SSH key to the rescue console, set it OS to linux64, then press "mount rescue and power cycle" button
+How to use: add SSH key to the rescue console, then press "mount rescue and power cycle" button
 Next, connect via SSH to console, and run the script
-Answer script questions about desired hostname, ZFS ARC cache size et cetera
-To cope with network failures its higly recommended to run the script inside screen console
+Answer script questions about desired hostname, ZFS pool name, root password and ZFS ARC cache size
+To cope with network failures its highly recommended to run the script inside screen console
 screen -dmS zfs
 screen -r zfs
-To detach from screen console, hit Ctrl-d then a
+To detach from screen console, hit Ctrl-a then d
 end_header_info
 
-set -o errexit
-set -o pipefail
-set -o nounset
+set -Eeuo pipefail
 
-export TMPDIR=/tmp
 export DEBIAN_FRONTEND=noninteractive
 
-# Variables
-v_bpool_name=
-v_bpool_tweaks=
-v_rpool_name=
-v_rpool_tweaks=
-declare -a v_selected_disks
-v_swap_size=                 # integer
-v_free_tail_space=           # integer
-v_hostname=
-v_kernel_variant=
-v_zfs_arc_max_mb=
-v_root_password=
-v_encrypt_rpool=             # 0=false, 1=true
-v_passphrase=
-v_zfs_experimental=
-v_suitable_disks=()
+# ---- Configuration ----
+SYSTEM_HOSTNAME=""
+ROOT_PASSWORD=""
+ZFS_POOL=""
+ZFS_ARC_MAX_MB=""
+ZFS_ENCRYPT=false
+ZFS_PASSPHRASE=""
+ZFS_KEYFILE="/etc/zfs/zroot.key"
+export DEBIAN_CODENAME="bookworm"   # Debian 12, exported so chroot shells see it
+TARGET="/mnt/debian"
 
-# Constants
-c_deb_packages_repo=https://deb.debian.org/debian
-c_deb_security_repo=https://deb.debian.org/debian-security
+ZBM_BIOS_URL="https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.1.0/zfsbootmenu-release-x86_64-v3.1.0-linux6.12.tar.gz"
+ZBM_EFI_URL="https://github.com/zbm-dev/zfsbootmenu/releases/download/v3.1.0/zfsbootmenu-release-x86_64-v3.1.0-linux6.12.EFI"
 
-c_default_zfs_arc_max_mb=250
-c_default_bpool_tweaks="-o ashift=12 -O compression=lz4"
-c_default_rpool_tweaks="-o ashift=12 -O acltype=posixacl -O compression=zstd-9 -O dnodesize=auto -O relatime=on -O xattr=sa -O normalization=formD"
-c_default_hostname=terem
-c_zfs_mount_dir=/mnt
-c_log_dir=$(dirname "$(mktemp)")/zfs-hetzner-vm
-c_install_log=$c_log_dir/install.log
-c_lsb_release_log=$c_log_dir/lsb_release.log
-c_disks_log=$c_log_dir/disks.log
-c_efimode_enabled="$(if [[ -d /sys/firmware/efi/efivars ]]; then echo 1; else echo 0; fi)"
+MAIN_BOOT="/main_boot"
 
-function activate_debug {
-  mkdir -p "$c_log_dir"
+# Hetzner mirror for Debian
+MIRROR_SITE="https://mirror.hetzner.com"
 
-  exec 5> "$c_install_log"
-  BASH_XTRACEFD="5"
-  set -x
+# Global variables
+INSTALL_DISK=""
+EFI_MODE=false
+BOOT_LABEL=""
+BOOT_TYPE=""
+BOOT_PART=""
+ZFS_PART=""
+
+function on_error {
+    echo "" >&2
+    echo "ERROR: installation failed at line $1 (exit code $2)." >&2
+    echo "The system may be left in a partially installed state." >&2
+    echo "Check mounts under $TARGET and $MAIN_BOOT and the state of pool '$ZFS_POOL' before re-running." >&2
 }
+trap 'on_error $LINENO $?' ERR
 
-# shellcheck disable=SC2120
-function print_step_info_header {
-  echo -n "
-###############################################################################
-# ${FUNCNAME[1]}"
-
-  if [[ "${1:-}" != "" ]]; then
-    echo -n " $1" 
-  fi
-
-
-  echo "
-###############################################################################
-"
-}
-
-function print_variables {
-  for variable_name in "$@"; do
-    declare -n variable_reference="$variable_name"
-
-    echo -n "$variable_name:"
-
-    case "$(declare -p "$variable_name")" in
-    "declare -a"* )
-      for entry in "${variable_reference[@]}"; do
-        echo -n " \"$entry\""
-      done
-      ;;
-    "declare -A"* )
-      for key in "${!variable_reference[@]}"; do
-        echo -n " $key=\"${variable_reference[$key]}\""
-      done
-      ;;
-    * )
-      echo -n " $variable_reference"
-      ;;
-    esac
-
-    echo
-  done
-
-  echo
-}
-
-function display_intro_banner {
-  # shellcheck disable=SC2119
-  print_step_info_header
-
-  local dialog_message='Hello!
-This script will prepare the ZFS pools, then install and configure minimal Debian 12 with ZFS root on Hetzner hosting VPS instance
-The script with minimal changes may be used on any other hosting provider  supporting KVM virtualization and offering Debian-based rescue system.
-In order to stop the procedure, hit Esc twice during dialogs (excluding yes/no ones), or Ctrl+C while any operation is running.
-'
-  dialog --msgbox "$dialog_message" 30 100
-}
-
-function store_os_distro_information {
-  # shellcheck disable=SC2119
-  print_step_info_header
-
-  lsb_release --all > "$c_lsb_release_log"
-}
-
+# ---- Preflight Checks ----
 function check_prerequisites {
-  # shellcheck disable=SC2119
-  print_step_info_header
-  if [[ $(id -u) -ne 0 ]]; then
-    echo 'This script must be run with administrative privileges!'
-    exit 1
-  fi
-  if [[ ! -r /root/.ssh/authorized_keys ]]; then
-    echo "SSH pubkey file is absent, please add it to the rescue system setting, then reboot into rescue system and run the script"
-    exit 1
-  fi
-  if ! dpkg-query --showformat="\${Status}" -W dialog 2> /dev/null | grep -q "install ok installed"; then
-    apt install --yes dialog
-  fi
-}
-
-function initial_load_debian_zed_cache {
-  chroot_execute "mkdir /etc/zfs/zfs-list.cache"
-  chroot_execute "touch /etc/zfs/zfs-list.cache/$v_rpool_name"
-  chroot_execute "ln -sf /usr/lib/zfs-linux/zed.d/history_event-zfs-list-cacher.sh /etc/zfs/zed.d/"
-
-  chroot_execute "zed -F &"
-
-  local success=0
-
-  if [[ ! -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" ]] || [[ -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" && (( $(find "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" -type f -printf '%s' 2> /dev/null) == 0 )) ]]; then  
-    chroot_execute "zfs set canmount=noauto $v_rpool_name"
-
-    SECONDS=0
-
-    while (( SECONDS++ <= 120 )); do
-      if [[ -e "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" ]] && (( $(find "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name" -type f -printf '%s' 2> /dev/null) > 0 )); then
-        success=1
-        break
-      else
-        sleep 1
-      fi
-    done
-  else
-    success=1
-  fi
-
-  if (( success != 1 )); then
-    echo "Fatal zed daemon error: the ZFS cache hasn't been updated by ZED!"
-    exit 1
-  fi
-
-  chroot_execute "pkill zed"
-
-  sed -Ei "s|/$c_zfs_mount_dir/?|/|g" "$c_zfs_mount_dir/etc/zfs/zfs-list.cache/$v_rpool_name"
-}
-
-function find_suitable_disks {
-  # shellcheck disable=SC2119
-  print_step_info_header
-
-  udevadm trigger
-
-  # shellcheck disable=SC2012
-  ls -l /dev/disk/by-id | tail -n +2 | perl -lane 'print "@F[8..10]"' > "$c_disks_log"
-
-  local candidate_disk_ids
-  local mounted_devices
-
-  candidate_disk_ids=$(find /dev/disk/by-id -regextype awk -regex '.+/(ata|nvme|scsi)-.+' -not -regex '.+-part[0-9]+$' | sort)
-  mounted_devices="$(df | awk 'BEGIN {getline} {print $1}' | xargs -n 1 lsblk -no pkname 2> /dev/null | sort -u || true)"
-
-  while read -r disk_id || [[ -n "$disk_id" ]]; do
-    local device_info
-
-    device_info="$(udevadm info --query=property "$(readlink -f "$disk_id")")"
-    block_device_basename="$(basename "$(readlink -f "$disk_id")")"
-
-    if ! grep -q '^ID_TYPE=cd$' <<< "$device_info"; then
-      if ! grep -q "^$block_device_basename\$" <<< "$mounted_devices"; then
-        v_suitable_disks+=("$disk_id")
-      fi
+    if [ "$(id -u)" -ne 0 ]; then
+        echo "ERROR: this script must be run as root." >&2
+        exit 1
     fi
-
-    cat >> "$c_disks_log" << LOG
-
-## DEVICE: $disk_id ################################
-
-$(udevadm info --query=property "$(readlink -f "$disk_id")")
-
-LOG
-
-  done < <(echo -n "$candidate_disk_ids")
-
-  if [[ ${#v_suitable_disks[@]} -eq 0 ]]; then
-    local dialog_message='No suitable disks have been found!
-
-If you think this is a bug, please open an issue on https://github.com/terem42/zfs-hetzner-vm/issues, and attach the file `'"$c_disks_log"'`.
-'
-    dialog --msgbox "$dialog_message" 30 100
-
-    exit 1
-  fi
-
-  print_variables v_suitable_disks
+    if [ ! -s /root/.ssh/authorized_keys ]; then
+        echo "ERROR: /root/.ssh/authorized_keys is missing or empty." >&2
+        echo "Add your SSH key in the Hetzner rescue console before booting rescue," >&2
+        echo "otherwise you will be locked out of the installed system." >&2
+        exit 1
+    fi
 }
 
-function select_disks {
-  # shellcheck disable=SC2119
-  print_step_info_header
+# ---- User Input Functions ----
+function setup_whiptail_colors {
+    # Green text on black background - classic terminal theme
+    export NEWT_COLORS='
+    root=green,black
+    window=green,black
+    shadow=green,black
+    border=green,black
+    title=green,black
+    textbox=green,black
+    button=black,green
+    listbox=green,black
+    actlistbox=black,green
+    actsellistbox=black,green
+    checkbox=green,black
+    actcheckbox=black,green
+    entry=green,black
+    label=green,black
+    '
+}
 
-  while true; do
-    local menu_entries_option=()
+function check_whiptail {
+    if ! command -v whiptail &> /dev/null; then
+        echo "Installing whiptail..."
+        apt update
+        apt install -y whiptail
+    fi
+    setup_whiptail_colors
+}
 
-    if [[ ${#v_suitable_disks[@]} -eq 1 ]]; then
-      local disk_selection_status=ON
+function user_cancelled {
+    echo "Installation cancelled by user."
+    exit 1
+}
+
+function get_hostname {
+    while true; do
+        if ! SYSTEM_HOSTNAME=$(whiptail \
+            --title " System Hostname " \
+            --inputbox "\nEnter the hostname for the new system:" \
+            10 60 "zfs-debian" \
+            3>&1 1>&2 2>&3); then
+            user_cancelled
+        fi
+
+        # Validate hostname
+        if [[ "$SYSTEM_HOSTNAME" =~ ^[a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?$ ]] && [[ ${#SYSTEM_HOSTNAME} -le 63 ]]; then
+            break
+        else
+            whiptail \
+                --title " Invalid Hostname " \
+                --msgbox "Invalid hostname. Please use only letters, numbers, and hyphens. Must start and end with alphanumeric character. Maximum 63 characters." \
+                12 60
+        fi
+    done
+}
+
+function get_zfs_pool_name {
+    while true; do
+        if ! ZFS_POOL=$(whiptail \
+            --title " ZFS Pool Name " \
+            --inputbox "\nEnter the name for the ZFS pool:" \
+            10 60 "rpool" \
+            3>&1 1>&2 2>&3); then
+            user_cancelled
+        fi
+
+        # Reject names reserved by ZFS
+        case "$ZFS_POOL" in
+            mirror*|raidz*|draid*|spare*|log)
+                whiptail \
+                    --title " Invalid Pool Name " \
+                    --msgbox "Pool name must not begin with a ZFS reserved word (mirror, raidz, draid, spare, log)." \
+                    10 60
+                continue
+                ;;
+        esac
+
+        # Validate ZFS pool name
+        if [[ "$ZFS_POOL" =~ ^[a-zA-Z][a-zA-Z0-9_-]*$ ]] && [[ ${#ZFS_POOL} -le 255 ]]; then
+            break
+        else
+            whiptail \
+                --title " Invalid Pool Name " \
+                --msgbox "Invalid ZFS pool name. Must start with a letter and contain only letters, numbers, hyphens, and underscores. Maximum 255 characters." \
+                12 60
+        fi
+    done
+}
+
+function get_root_password {
+    local password1
+    local password2
+    while true; do
+        if ! password1=$(whiptail \
+            --title " Root Password " \
+            --passwordbox "\nEnter root password (input hidden):" \
+            10 60 \
+            3>&1 1>&2 2>&3); then
+            user_cancelled
+        fi
+
+        if ! password2=$(whiptail \
+            --title " Confirm Root Password " \
+            --passwordbox "\nConfirm root password (input hidden):" \
+            10 60 \
+            3>&1 1>&2 2>&3); then
+            user_cancelled
+        fi
+
+        # Check if passwords match
+        if [ "$password1" = "$password2" ]; then
+            if [ -n "$password1" ]; then
+                ROOT_PASSWORD="$password1"
+                break
+            else
+                whiptail \
+                    --title " Empty Password " \
+                    --msgbox "Password cannot be empty. Please enter a password." \
+                    10 50
+            fi
+        else
+            whiptail \
+                --title " Password Mismatch " \
+                --msgbox "Passwords do not match. Please try again." \
+                10 50
+        fi
+    done
+}
+
+function get_encryption {
+    if ! whiptail \
+        --title " ZFS Native Encryption " \
+        --defaultno \
+        --yesno "\nEncrypt the root pool with ZFS native encryption?\n\nAt every boot you will need to enter the passphrase at the ZFSBootMenu prompt via the Hetzner server console." \
+        13 60; then
+        return
+    fi
+    ZFS_ENCRYPT=true
+
+    local pass1 pass2
+    while true; do
+        if ! pass1=$(whiptail \
+            --title " Pool Passphrase " \
+            --passwordbox "\nEnter the pool encryption passphrase (min 8 characters, input hidden):" \
+            10 60 \
+            3>&1 1>&2 2>&3); then
+            user_cancelled
+        fi
+
+        if ! pass2=$(whiptail \
+            --title " Confirm Pool Passphrase " \
+            --passwordbox "\nConfirm the passphrase (input hidden):" \
+            10 60 \
+            3>&1 1>&2 2>&3); then
+            user_cancelled
+        fi
+
+        if [ "$pass1" != "$pass2" ]; then
+            whiptail \
+                --title " Passphrase Mismatch " \
+                --msgbox "Passphrases do not match. Please try again." \
+                10 50
+        elif [ ${#pass1} -lt 8 ]; then
+            whiptail \
+                --title " Passphrase Too Short " \
+                --msgbox "ZFS requires a passphrase of at least 8 characters." \
+                10 50
+        else
+            ZFS_PASSPHRASE="$pass1"
+            break
+        fi
+    done
+}
+
+function get_arc_size {
+    local total_mb default_mb
+    total_mb=$(free -m | awk '/^Mem:/ {print $2}')
+    default_mb=$(( total_mb / 4 ))
+    if (( default_mb < 64 )); then
+        default_mb=64
+    fi
+    while true; do
+        if ! ZFS_ARC_MAX_MB=$(whiptail \
+            --title " ZFS ARC Cache Size " \
+            --inputbox "\nEnter the maximum ZFS ARC cache size in MiB\n(system RAM: ${total_mb} MiB):" \
+            11 60 "$default_mb" \
+            3>&1 1>&2 2>&3); then
+            user_cancelled
+        fi
+
+        if [[ "$ZFS_ARC_MAX_MB" =~ ^[0-9]+$ ]] && (( ZFS_ARC_MAX_MB >= 64 )) && (( ZFS_ARC_MAX_MB <= total_mb )); then
+            break
+        else
+            whiptail \
+                --title " Invalid ARC Size " \
+                --msgbox "ARC size must be an integer between 64 and ${total_mb} (MiB)." \
+                10 60
+        fi
+    done
+}
+
+function show_summary_and_confirm {
+    local summary
+    summary="Please review the installation settings:
+
+Hostname: $SYSTEM_HOSTNAME
+ZFS Pool: $ZFS_POOL
+Encryption: $([ "$ZFS_ENCRYPT" = true ] && echo "enabled (aes-256-gcm)" || echo "disabled")
+ZFS ARC max: $ZFS_ARC_MAX_MB MiB
+Debian Version: $DEBIAN_CODENAME (12)
+Target: $TARGET
+Boot Mode: $([ "$EFI_MODE" = true ] && echo "EFI" || echo "BIOS")
+Install Disk: $INSTALL_DISK
+
+*** WARNING: This will DESTROY ALL DATA on $INSTALL_DISK! ***
+
+Do you want to continue with the installation?"
+
+    if whiptail \
+        --title " Installation Summary " \
+        --yesno "$summary" \
+        20 60; then
+        echo "User confirmed installation. Starting now..."
     else
-      local disk_selection_status=OFF
+        user_cancelled
+    fi
+}
+
+function get_user_input {
+    echo "======= Gathering Installation Parameters =========="
+    check_whiptail
+
+    # Show welcome message
+    if ! whiptail \
+        --title " ZFS Debian Installer " \
+        --msgbox "Welcome to the ZFS Debian Installer for Hetzner Cloud.\n\nThis script will install Debian 12 with ZFS root on your server." \
+        12 60; then
+        user_cancelled
     fi
 
-    for disk_id in "${v_suitable_disks[@]}"; do
-      menu_entries_option+=("$disk_id" "($block_device_basename)" "$disk_selection_status")
-    done
-
-    local dialog_message="Select the ZFS devices (multiple selections can be in mirror or strip).
-
-Devices with mounted partitions, cdroms, and removable devices are not displayed!
-"
-    mapfile -t v_selected_disks < <(dialog --separate-output --checklist "$dialog_message" 30 100 $((${#menu_entries_option[@]} / 3)) "${menu_entries_option[@]}" 3>&1 1>&2 2>&3)
-
-    if [[ ${#v_selected_disks[@]} -gt 0 ]]; then
-      break
-    fi
-  done
-
-  print_variables v_selected_disks
+    # Get user inputs
+    get_hostname
+    get_zfs_pool_name
+    get_root_password
+    get_encryption
+    get_arc_size
 }
 
-function ask_swap_size {
-  # shellcheck disable=SC2119
-  print_step_info_header
+# ---- System Detection Functions ----
+function detect_efi {
+    echo "======= Detecting EFI support =========="
 
-  local swap_size_invalid_message=
-
-  while [[ ! $v_swap_size =~ ^[0-9]+$ ]]; do
-    v_swap_size=$(dialog --inputbox "${swap_size_invalid_message}Enter the swap size in GiB (0 for no swap):" 30 100 2 3>&1 1>&2 2>&3)
-
-    swap_size_invalid_message="Invalid swap size! "
-  done
-
-  print_variables v_swap_size
-}
-
-function ask_free_tail_space {
-  # shellcheck disable=SC2119
-  print_step_info_header
-
-  local tail_space_invalid_message=
-
-  while [[ ! $v_free_tail_space =~ ^[0-9]+$ ]]; do
-    v_free_tail_space=$(dialog --inputbox "${tail_space_invalid_message}Enter the space to leave at the end of each disk (0 for none):" 30 100 0 3>&1 1>&2 2>&3)
-
-    tail_space_invalid_message="Invalid size! "
-  done
-
-  print_variables v_free_tail_space
-}
-
-function ask_zfs_arc_max_size {
-  # shellcheck disable=SC2119
-  print_step_info_header
-
-  local zfs_arc_max_invalid_message=
-
-  while [[ ! $v_zfs_arc_max_mb =~ ^[0-9]+$ ]]; do
-    v_zfs_arc_max_mb=$(dialog --inputbox "${zfs_arc_max_invalid_message}Enter ZFS ARC cache max size in Mb (minimum 64Mb, enter 0 for ZFS default value, the default will take up to 50% of memory):" 30 100 "$c_default_zfs_arc_max_mb" 3>&1 1>&2 2>&3)
-
-    zfs_arc_max_invalid_message="Invalid size! "
-  done
-
-  print_variables v_zfs_arc_max_mb
-}
-
-
-function ask_pool_names {
-  # shellcheck disable=SC2119
-  print_step_info_header
-
-  local bpool_name_invalid_message=
-
-  while [[ ! $v_bpool_name =~ ^[a-z][a-zA-Z_:.-]+$ ]]; do
-    v_bpool_name=$(dialog --inputbox "${bpool_name_invalid_message}Insert the name for the boot pool" 30 100 bpool 3>&1 1>&2 2>&3)
-
-    bpool_name_invalid_message="Invalid pool name! "
-  done
-  local rpool_name_invalid_message=
-
-  while [[ ! $v_rpool_name =~ ^[a-z][a-zA-Z_:.-]+$ ]]; do
-    v_rpool_name=$(dialog --inputbox "${rpool_name_invalid_message}Insert the name for the root pool" 30 100 rpool 3>&1 1>&2 2>&3)
-
-    rpool_name_invalid_message="Invalid pool name! "
-  done
-
-  print_variables v_bpool_name v_rpool_name
-}
-
-function ask_pool_tweaks {
-  # shellcheck disable=SC2119
-  print_step_info_header
-
-  v_bpool_tweaks=$(dialog --inputbox "Insert the tweaks for the boot pool" 30 100 -- "$c_default_bpool_tweaks" 3>&1 1>&2 2>&3)
-  v_rpool_tweaks=$(dialog --inputbox "Insert the tweaks for the root pool" 30 100 -- "$c_default_rpool_tweaks" 3>&1 1>&2 2>&3)
-
-  print_variables v_bpool_tweaks v_rpool_tweaks
-}
-
-
-function ask_root_password {
-  # shellcheck disable=SC2119
-  print_step_info_header
-
-  set +x
-  local password_invalid_message=
-  local password_repeat=-
-
-  while [[ "$v_root_password" != "$password_repeat" || "$v_root_password" == "" ]]; do
-    v_root_password=$(dialog --passwordbox "${password_invalid_message}Please enter the root account password (can't be empty):" 30 100 3>&1 1>&2 2>&3)
-    password_repeat=$(dialog --passwordbox "Please repeat the password:" 30 100 3>&1 1>&2 2>&3)
-
-    password_invalid_message="Passphrase empty, or not matching! "
-  done
-  set -x
-}
-
-function ask_encryption {
-  print_step_info_header
-
-  if dialog --defaultno --yesno 'Do you want to encrypt the root pool?' 30 100; then
-    v_encrypt_rpool=1
-  fi
-  set +x
-  if [[ $v_encrypt_rpool == "1" ]]; then
-    local passphrase_invalid_message=
-    local passphrase_repeat=-
-    while [[ "$v_passphrase" != "$passphrase_repeat" || ${#v_passphrase} -lt 8 ]]; do
-      v_passphrase=$(dialog --passwordbox "${passphrase_invalid_message}Please enter the passphrase for the root pool (8 chars min.):" 30 100 3>&1 1>&2 2>&3)
-      passphrase_repeat=$(dialog --passwordbox "Please repeat the passphrase:" 30 100 3>&1 1>&2 2>&3)
-
-      passphrase_invalid_message="Passphrase too short, or not matching! "
-    done
-  fi
-  set -x
-}
-
-function ask_zfs_experimental {
-  print_step_info_header
-
-  if dialog --defaultno --yesno 'Do you want to use experimental zfs module build?' 30 100; then
-    v_zfs_experimental=1
-  fi
-}
-
-function ask_hostname {
-  # shellcheck disable=SC2119
-  print_step_info_header
-
-  local hostname_invalid_message=
-
-  while [[ ! $v_hostname =~ ^[a-z][a-zA-Z0-9_:.-]+$ ]]; do
-    v_hostname=$(dialog --inputbox "${hostname_invalid_message}Set the host name" 30 100 "$c_default_hostname" 3>&1 1>&2 2>&3)
-
-    hostname_invalid_message="Invalid host name! "
-  done
-
-  print_variables v_hostname
-}
-
-function determine_kernel_variant {
-  if dmidecode | grep -q vServer; then
-    v_kernel_variant="-cloud"
-  fi
-}
-
-function chroot_execute {
-  chroot $c_zfs_mount_dir bash -c "DEBIAN_FRONTEND=noninteractive $1"
-}
-
-function unmount_and_export_fs {
-  # shellcheck disable=SC2119
-  print_step_info_header
-
-  for virtual_fs_dir in dev sys proc; do
-    umount --recursive --force --lazy "$c_zfs_mount_dir/$virtual_fs_dir"
-  done
-
-  local max_unmount_wait=5
-  echo -n "Waiting for virtual filesystems to unmount "
-
-  SECONDS=0
-
-  for virtual_fs_dir in dev sys proc; do
-    while mountpoint -q "$c_zfs_mount_dir/$virtual_fs_dir" && [[ $SECONDS -lt $max_unmount_wait ]]; do
-      sleep 0.5
-      echo -n .
-    done
-  done
-
-  echo
-
-  for virtual_fs_dir in dev sys proc; do
-    if mountpoint -q "$c_zfs_mount_dir/$virtual_fs_dir"; then
-      echo "Re-issuing umount for $c_zfs_mount_dir/$virtual_fs_dir"
-      umount --recursive --force --lazy "$c_zfs_mount_dir/$virtual_fs_dir"
-    fi
-  done
-
-  SECONDS=0
-  zpools_exported=99
-  echo "===========exporting zfs pools============="
-  set +e
-  while (( zpools_exported == 99 )) && (( SECONDS++ <= 60 )); do    
-    if zpool export -a 2> /dev/null; then
-      zpools_exported=1
-      echo "all zfs pools were succesfully exported"
-      break;
+    if [ -d /sys/firmware/efi ]; then
+        echo "✓ EFI firmware detected"
+        EFI_MODE=true
+        BOOT_LABEL="EFI"
+        BOOT_TYPE="ef00"
     else
-      sleep 1
-     fi
-  done
-  set -e
-  if (( zpools_exported != 1 )); then
-    echo "failed to export zfs pools"
-    exit 1
-  fi
+        echo "✓ Legacy BIOS mode detected"
+        EFI_MODE=false
+        BOOT_LABEL="boot"
+        BOOT_TYPE="8300"
+    fi
 }
 
-#################### MAIN ################################
-export LC_ALL=en_US.UTF-8
-export NCURSES_NO_UTF8_ACS=1
+function find_install_disk {
+    echo "======= Finding install disk =========="
 
-check_prerequisites
+    local candidate_disks=()
 
-activate_debug
+    # Use lsblk to find all unmounted, writable disks
+    while IFS= read -r disk; do
+        [[ -n "$disk" ]] && candidate_disks+=("$disk")
+    done < <(lsblk -npo NAME,TYPE,RO,MOUNTPOINT | awk '
+        $2 == "disk" && $3 == "0" && $4 == "" {print $1}
+    ')
 
-display_intro_banner
+    if [[ ${#candidate_disks[@]} -eq 0 ]]; then
+        echo "No suitable installation disks found" >&2
+        echo "Looking for: unmounted, writable disks without partitions in use" >&2
+        exit 1
+    fi
 
-find_suitable_disks
+    if [[ ${#candidate_disks[@]} -eq 1 ]]; then
+        INSTALL_DISK="${candidate_disks[0]}"
+        echo "Single candidate disk found: $INSTALL_DISK"
+    else
+        select_install_disk "${candidate_disks[@]}"
+    fi
 
-select_disks
+    echo "Using installation disk: $INSTALL_DISK"
 
-ask_swap_size
+    # Show all available disks for verification
+    echo "All available disks:"
+    lsblk -o NAME,SIZE,TYPE,MOUNTPOINT,RO | grep -v loop
+}
 
-ask_free_tail_space
+function select_install_disk {
+    local disks=("$@")
+    local menu_items=()
+    local disk desc
 
-ask_pool_names
+    for disk in "${disks[@]}"; do
+        # Describe each disk by size and model (model is empty on some virtio disks)
+        desc=$(lsblk -dno SIZE,MODEL "$disk" 2>/dev/null | awk '{$1=$1; print}')
+        menu_items+=("$disk" "${desc:-unknown}")
+    done
 
-ask_pool_tweaks
+    if ! INSTALL_DISK=$(whiptail \
+        --title " Select Installation Disk " \
+        --menu "\nMultiple candidate disks found. Select the disk to install to.\n\n*** ALL DATA on the chosen disk will be DESTROYED ***" \
+        20 70 "${#disks[@]}" \
+        "${menu_items[@]}" \
+        3>&1 1>&2 2>&3); then
+        user_cancelled
+    fi
+}
 
-ask_encryption
+# ---- Rescue System Preparation Functions ----
+function remove_unused_kernels {
+    echo "=========== Removing unused kernels in rescue system =========="
+    for kver in $(find /lib/modules/* -maxdepth 0 -type d \
+                    | grep -v "$(uname -r)" \
+                    | cut -s -d "/" -f 4); do
 
-ask_zfs_arc_max_size
+        for pkg in "linux-headers-$kver" "linux-image-$kver"; do
+            if dpkg -l "$pkg" 2>/dev/null | grep -q '^ii'; then
+                echo "Purging $pkg ..."
+                apt purge --yes "$pkg"
+            else
+                echo "Package $pkg not installed, skipping."
+            fi
+        done
+    done
+}
 
-ask_zfs_experimental
+function install_zfs_on_rescue_system {
+    echo "======= Installing ZFS on rescue system =========="
+    echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
 
-ask_root_password
+    # Enable backports of the rescue system's own release for a newer ZFS version
+    local rescue_codename
+    # shellcheck disable=SC1091
+    rescue_codename=$(. /etc/os-release && echo "$VERSION_CODENAME")
+    echo "deb ${MIRROR_SITE}/debian/packages ${rescue_codename}-backports main contrib" > /etc/apt/sources.list.d/backports.list
+    apt update
+    # --no-install-recommends: zfsutils-linux recommends zfs-dkms, whose dkms
+    # dependency recommends linux-headers-amd64, dragging in a full backports
+    # kernel and a doomed DKMS build that can exhaust the RAM-backed rescue root
+    apt install -y --no-install-recommends -t "${rescue_codename}-backports" zfsutils-linux
 
-ask_hostname
+    # The Hetzner rescue system ships static zfs/zpool binaries in /usr/local/sbin
+    # that shadow the packaged ones; remove only those known copies
+    rm -f /usr/local/sbin/zfs /usr/local/sbin/zpool
+    hash -r
+    export PATH=/usr/sbin:$PATH
 
-determine_kernel_variant
+    # The rescue kernel normally ships the ZFS module; build it via DKMS if missing
+    if ! modprobe zfs; then
+        echo "ZFS module not available in rescue kernel, building via DKMS..."
+        apt install -y --no-install-recommends -t "${rescue_codename}-backports" "linux-headers-$(uname -r)" zfs-dkms
+        modprobe zfs
+    fi
+}
 
-clear
+# ---- Disk Partitioning Functions ----
+function partition_disk {
+    echo "======= Partitioning disk =========="
+    sgdisk -Z "$INSTALL_DISK"
 
-echo "===========remove unused kernels in rescue system========="
-for kver in $(find /lib/modules/* -maxdepth 0 -type d | grep -v "$(uname -r)" | cut -s -d "/" -f 4); do
-  if dpkg -l "linux-headers-$kver" 2>/dev/null | grep -q "^ii"; then
-    apt purge --yes "linux-headers-$kver"
-  fi
-  if dpkg -l "linux-image-$kver" 2>/dev/null | grep -q "^ii"; then
-    apt purge --yes "linux-image-$kver"
-  fi
+    # Boot partition (128 MiB is plenty for ZFSBootMenu), then ZFS on the rest
+    sgdisk -n1:1M:+128M -t1:"$BOOT_TYPE" -c1:"$BOOT_LABEL" "$INSTALL_DISK"
+    sgdisk -n2:0:0 -t2:bf00 -c2:"zfs" "$INSTALL_DISK"
+    if [ "$EFI_MODE" != true ]; then
+        # Legacy BIOS bootable attribute, scanned for by syslinux gptmbr.bin
+        sgdisk -A 1:set:2 "$INSTALL_DISK"
+    fi
+
+    partprobe "$INSTALL_DISK" || true
+    udevadm settle
+
+    # Derive partition device names from the disk name; disks whose name ends in
+    # a digit (nvme0n1, loop0) get a "p" separator before the partition number
+    local part_prefix="$INSTALL_DISK"
+    if [[ "$INSTALL_DISK" =~ [0-9]$ ]]; then
+        part_prefix="${INSTALL_DISK}p"
+    fi
+    BOOT_PART="${part_prefix}1"
+    ZFS_PART="${part_prefix}2"
+
+    local part
+    for part in "$BOOT_PART" "$ZFS_PART"; do
+        if [ ! -b "$part" ]; then
+            echo "ERROR: expected partition $part not found after partitioning" >&2
+            exit 1
+        fi
+    done
+
+    if [ "$EFI_MODE" = true ]; then
+        # Format ESP as FAT32
+        mkfs.fat -F 32 -n "$BOOT_LABEL" "$BOOT_PART"
+    else
+        mkfs.ext4 -F -L "$BOOT_LABEL" "$BOOT_PART"
+    fi
+}
+
+# ---- ZFS Pool and Dataset Functions ----
+function create_zfs_pool {
+    echo "======= Creating ZFS pool =========="
+    mkdir -p "$TARGET"
+
+    # ZFS native encryption per the ZFSBootMenu docs: the passphrase lives in a
+    # key file that must exist before zpool create. ZFSBootMenu prompts for the
+    # passphrase at boot; the key file is embedded in the OS initramfs so the
+    # second unlock during boot needs no prompt.
+    local encryption_options=()
+    if [ "$ZFS_ENCRYPT" = true ]; then
+        mkdir -p /etc/zfs
+        printf '%s\n' "$ZFS_PASSPHRASE" > "$ZFS_KEYFILE"
+        chmod 000 "$ZFS_KEYFILE"
+        encryption_options=(-O encryption=aes-256-gcm -O keyformat=passphrase -O keylocation="file://$ZFS_KEYFILE")
+    fi
+
+    # -R "$TARGET" (altroot) prefixes all mountpoints with $TARGET for the
+    # lifetime of this import only, so datasets can be created with their final
+    # mountpoints right away; altroot is never written to the pool
+    zpool create -f -o ashift=12 \
+    -o autotrim=on \
+    -o cachefile="/etc/zfs/zpool.cache" \
+    -R "$TARGET" \
+    -O compression=lz4 \
+    -O acltype=posixacl \
+    -O xattr=sa \
+    -O mountpoint=none \
+    "${encryption_options[@]}" \
+    "$ZFS_POOL" "$ZFS_PART"
+
+    zfs create -o mountpoint=none   "$ZFS_POOL/ROOT"
+    zfs create -o mountpoint=legacy "$ZFS_POOL/ROOT/debian"
+
+    echo "======= Assigning $ZFS_POOL/ROOT/debian dataset as bootable =========="
+    zpool set bootfs="$ZFS_POOL/ROOT/debian" "$ZFS_POOL"
+
+    if [ "$ZFS_ENCRYPT" = true ]; then
+        # Tell ZFSBootMenu where the key file lives so it caches the key after
+        # the initial unlock instead of re-prompting for every operation
+        zfs set org.zfsbootmenu:keysource="$ZFS_POOL/ROOT/debian" "$ZFS_POOL"
+    fi
+}
+
+function create_additional_zfs_datasets {
+    echo "======= Creating additional ZFS datasets =========="
+    # Mountpoints are final; while the pool is imported with altroot=$TARGET
+    # they are automatically mounted under $TARGET
+
+    # Ensure parent datasets are created first
+    zfs create -o mountpoint=none "$ZFS_POOL/ROOT/debian/var"
+    zfs create -o mountpoint=none "$ZFS_POOL/ROOT/debian/var/cache"
+
+    zfs create -o com.sun:auto-snapshot=false -o devices=off -o mountpoint=/tmp "$ZFS_POOL/ROOT/debian/tmp"
+    zfs create -o com.sun:auto-snapshot=false -o devices=off -o mountpoint=/var/tmp "$ZFS_POOL/ROOT/debian/var/tmp"
+    zfs create -o atime=off -o mountpoint=/var/log "$ZFS_POOL/ROOT/debian/var/log"
+    zfs create -o com.sun:auto-snapshot=false -o atime=off -o mountpoint=/var/cache/apt "$ZFS_POOL/ROOT/debian/var/cache/apt"
+
+    # Create home dataset separately
+    zfs create -o mountpoint=/home "$ZFS_POOL/home"
+
+    # Mount any datasets not already auto-mounted
+    zfs mount -a
+
+    # Set permissions on the actual ZFS datasets
+    echo "Setting permissions on ZFS datasets..."
+    chmod 1777 "$TARGET/tmp" "$TARGET/var/tmp"
+    echo "✓ Temp directory permissions set (1777)"
+
+    echo ""
+    echo "Detailed dataset listing:"
+    zfs list -o name,mountpoint -r "$ZFS_POOL"
+}
+
+# ---- System Bootstrap Functions ----
+function bootstrap_debian_system {
+    echo "======= Bootstrapping Debian to temporary directory =========="
+
+    # Install debootstrap if not available
+    if ! command -v debootstrap &> /dev/null; then
+        echo "Installing debootstrap..."
+        apt update
+        apt install -y debootstrap
+    fi
+
+    # Mount root dataset (legacy mountpoint, mounted manually)
+    mount -t zfs "$ZFS_POOL/ROOT/debian" "$TARGET"
+
+    create_additional_zfs_datasets
+
+    # Bootstrap Debian 12 (Bookworm) - include dbus to satisfy systemd-resolved dependency
+    debootstrap \
+        --components=main,contrib,non-free,non-free-firmware \
+        --include=initramfs-tools,dbus,locales,debconf-i18n,apt-utils,keyboard-configuration,console-setup,kbd,zstd,systemd-resolved,systemd-timesyncd \
+        "$DEBIAN_CODENAME" \
+        "$TARGET" \
+        "$MIRROR_SITE/debian/packages"
+
+    # systemd-resolved makes /etc/resolv.conf a symlink into /run, which is
+    # dangling inside the chroot; use the rescue system's resolver during the
+    # install (restored by restore_target_resolv_conf before reboot)
+    rm -f "$TARGET/etc/resolv.conf"
+    cp /etc/resolv.conf "$TARGET/etc/resolv.conf"
+}
+
+function stage_encryption_key {
+    if [ "$ZFS_ENCRYPT" != true ]; then
+        return
+    fi
+    echo "======= Staging encryption key into target =========="
+    # zfs-initramfs automatically embeds key files referenced by keylocation
+    # (under /etc/zfs) into the initramfs; UMASK=0077 keeps that initramfs
+    # from being world-readable (per the ZFSBootMenu Debian guide)
+    mkdir -p "$TARGET/etc/zfs"
+    cp "$ZFS_KEYFILE" "$TARGET$ZFS_KEYFILE"
+    chmod 000 "$TARGET$ZFS_KEYFILE"
+    mkdir -p "$TARGET/etc/initramfs-tools/conf.d"
+    echo "UMASK=0077" > "$TARGET/etc/initramfs-tools/conf.d/umask.conf"
+}
+
+function configure_zfs_arc {
+    echo "======= Configuring ZFS ARC cache size =========="
+    mkdir -p "$TARGET/etc/modprobe.d"
+    echo "options zfs zfs_arc_max=$(( ZFS_ARC_MAX_MB * 1024 * 1024 ))" > "$TARGET/etc/modprobe.d/zfs.conf"
+    cat "$TARGET/etc/modprobe.d/zfs.conf"
+}
+
+function setup_chroot_environment {
+    echo "======= Mounting virtual filesystems for chroot =========="
+    mount -t proc proc "$TARGET/proc"
+    mount -t sysfs sysfs "$TARGET/sys"
+
+    # Only mount specific tmpfs directories, not the entire /run
+    mkdir -p "$TARGET/run/lock" "$TARGET/run/shm"
+    mount -t tmpfs tmpfs "$TARGET/run/lock"
+    mount -t tmpfs tmpfs "$TARGET/run/shm"
+    mount -t tmpfs tmpfs "$TARGET/tmp"
+
+    mount --bind /dev "$TARGET/dev"
+    mount --bind /dev/pts "$TARGET/dev/pts"
+}
+
+# ---- System Configuration Functions ----
+function configure_basic_system {
+    echo "======= Configuring basic system settings =========="
+    chroot "$TARGET" /bin/bash <<EOF
+set -euo pipefail
+
+# Set hostname from variable
+echo "$SYSTEM_HOSTNAME" > /etc/hostname
+
+# Configure timezone (Vienna)
+echo "Europe/Vienna" > /etc/timezone
+ln -sf /usr/share/zoneinfo/Europe/Vienna /etc/localtime
+
+# Generate locales
+cat > /etc/locale.gen <<'LOCALES'
+en_US.UTF-8 UTF-8
+de_AT.UTF-8 UTF-8
+fr_FR.UTF-8 UTF-8
+ru_RU.UTF-8 UTF-8
+LOCALES
+
+locale-gen
+
+# Set default locale
+update-locale LANG=en_US.UTF-8 LC_ALL=en_US.UTF-8
+
+# Configure keyboard for German and Russian with Ctrl+Shift toggle
+cat > /etc/default/keyboard <<'KEYBOARD'
+# KEYBOARD CONFIGURATION FILE
+
+# Consult the keyboard(5) manual page.
+
+XKBMODEL="pc105"
+XKBLAYOUT="de,ru"
+XKBVARIANT=","
+XKBOPTIONS="grp:ctrl_shift_toggle"
+
+BACKSPACE="guess"
+KEYBOARD
+
+# Compile the console keyboard configuration without touching the
+# (nonexistent) console of the chroot
+setupcon --save-only || true
+
+# Update /etc/hosts with the hostname
+echo "127.0.0.1 localhost" > /etc/hosts
+echo "127.0.1.1 $SYSTEM_HOSTNAME" >> /etc/hosts
+echo "::1 localhost ip6-localhost ip6-loopback" >> /etc/hosts
+echo "ff02::1 ip6-allnodes" >> /etc/hosts
+echo "ff02::2 ip6-allrouters" >> /etc/hosts
+
+# Set proper permissions for ZFS datasets
+chmod 1777 /tmp
+chmod 1777 /var/tmp
+EOF
+
+    echo "======= Configuration Summary ======="
+    chroot "$TARGET" /bin/bash <<'EOF'
+echo "Hostname: $(cat /etc/hostname)"
+echo "Timezone: $(cat /etc/timezone)"
+echo "Current time: $(date)"
+echo "Default locale: $(grep LANG /etc/default/locale)"
+echo "Available locales:"
+locale -a | grep -E "(en_US|de_AT|fr_FR|ru_RU)"
+echo "Keyboard layout: $(grep XKBLAYOUT /etc/default/keyboard)"
+EOF
+}
+
+function install_system_packages {
+    echo "======= Configuring APT sources for Debian 12 =========="
+    cat > "$TARGET/etc/apt/sources.list" <<SOURCES
+deb ${MIRROR_SITE}/debian/packages ${DEBIAN_CODENAME} main contrib non-free non-free-firmware
+deb ${MIRROR_SITE}/debian/packages ${DEBIAN_CODENAME}-updates main contrib non-free non-free-firmware
+deb ${MIRROR_SITE}/debian/security ${DEBIAN_CODENAME}-security main contrib non-free non-free-firmware
+deb ${MIRROR_SITE}/debian/packages ${DEBIAN_CODENAME}-backports main contrib non-free non-free-firmware
+SOURCES
+
+    echo "======= Installing ZFS and essential packages in chroot =========="
+    chroot "$TARGET" /bin/bash <<'EOF'
+set -euo pipefail
+
+# Update package lists
+apt update
+
+# Install kernel
+apt install -y --no-install-recommends linux-image-cloud-amd64 linux-headers-cloud-amd64
+
+# Install essential packages
+apt install -y curl nano htop net-tools ssh \
+    apt-transport-https ca-certificates gnupg dirmngr \
+    firmware-linux-free apparmor
+
+echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections
+
+apt install -y -t "${DEBIAN_CODENAME}-backports" zfsutils-linux zfs-initramfs zfs-dkms
+
+# Generate a stable hostid; zfs-initramfs embeds /etc/hostid in the initramfs
+# so the pool import at boot uses a consistent identity
+zgenhostid -f
+echo "hostid: $(hostid)"
+
+# Get the actual kernel version installed in the chroot
+KERNEL_VERSION=$(ls /lib/modules/ | head -n1)
+echo "Detected kernel version: $KERNEL_VERSION"
+
+# Verify ZFS module is available in the chroot filesystem
+echo "=== Verifying ZFS module in chroot ==="
+if find "/lib/modules/$KERNEL_VERSION" -name "*zfs*" -type f | grep -q .; then
+    echo "✓ ZFS module files found in /lib/modules/$KERNEL_VERSION/"
+    find "/lib/modules/$KERNEL_VERSION" -name "*zfs*" -type f
+else
+    echo "✗ ZFS module files not found - attempting DKMS rebuild"
+    dkms autoinstall -k "$KERNEL_VERSION" || true
+    depmod -a "$KERNEL_VERSION"
+
+    # Check again after DKMS rebuild
+    if find "/lib/modules/$KERNEL_VERSION" -name "*zfs*" -type f | grep -q .; then
+        echo "✓ ZFS module files found after DKMS rebuild"
+    else
+        echo "✗ ZFS module files still not found - aborting, system would be unbootable" >&2
+        exit 1
+    fi
+fi
+
+# Ensure ZFS module is included in initramfs
+grep -qxF "zfs" /etc/initramfs-tools/modules || echo "zfs" >> /etc/initramfs-tools/modules
+
+# Generate initramfs with ZFS support
+update-initramfs -u -k all
+
+# Verify kernel installation
+echo "Installed kernel packages:"
+dpkg -l | grep linux-image
+echo "Kernel version:"
+ls /lib/modules/
+echo "Kernel files in ZFS dataset:"
+ls -la /boot/vmlinuz* /boot/initrd.img* 2>/dev/null || echo "No kernel files found"
+EOF
+}
+
+function verify_initramfs {
+    echo "======= Verifying initramfs contents =========="
+    chroot "$TARGET" /bin/bash <<'EOF'
+set -euo pipefail
+
+echo "=== Checking initramfs for ZFS components ==="
+for initrd in /boot/initrd.img-*; do
+    if [ -f "$initrd" ]; then
+        echo "Checking: $initrd"
+        lsinitramfs "$initrd" | grep -E "(zfs|pool|dataset|spl)" | head -10 || echo "No ZFS components found (this might be normal for first check)"
+        echo "---"
+    fi
 done
 
-echo "======= installing zfs on rescue system =========="
+echo "=== Checking ZFS module files on disk ==="
+KERNEL_VERSION=$(ls /lib/modules/ | head -n1)
+find "/lib/modules/$KERNEL_VERSION" -name "*zfs*" -type f
 
-  echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections  
-#  echo "y" | zfs
-# linux-headers-generic linux-image-generic
-  apt install --yes software-properties-common dpkg-dev dkms
-  rm -f "$(which zfs)"
-  rm -f "$(which zpool)"
-  echo -e "deb http://deb.debian.org/debian/ testing main contrib non-free\ndeb http://deb.debian.org/debian/ testing main contrib non-free\n" >/etc/apt/sources.list.d/bookworm-testing.list
-  echo -e "Package: src:zfs-linux\nPin: release n=testing\nPin-Priority: 990\n" > /etc/apt/preferences.d/90_zfs
-  apt update  
-  apt install -t testing --yes -o Dpkg::Options::="--force-confdef" -o Dpkg::Options::="--force-confold" zfs-dkms zfsutils-linux
-  rm /etc/apt/sources.list.d/bookworm-testing.list
-  rm /etc/apt/preferences.d/90_zfs
-  apt update
-  export PATH=$PATH:/usr/sbin
-  zfs --version
+echo "=== Testing ZFS commands ==="
+which zpool && zpool --version || echo "zpool not found"
+which zfs && zfs --version || echo "zfs not found"
 
-echo "======= partitioning the disk =========="
+echo "=== Checking DKMS status ==="
+dkms status || echo "DKMS not available"
 
-  if [[ $v_free_tail_space -eq 0 ]]; then
-    tail_space_parameter=0
-  else
-    tail_space_parameter="-${v_free_tail_space}G"
-  fi
+echo "=== Checking if ZFS tools are properly installed ==="
+dpkg -l | grep -E "(zfs|spl)" || true
 
-  for selected_disk in "${v_selected_disks[@]}"; do
-    wipefs --all --force "$selected_disk"
-    if (( c_efimode_enabled == 1 )); then
-      sgdisk -a1 -n1:24K:+1G            -t1:EF00 "$selected_disk" # EFI partition
-    else
-      sgdisk -a1 -n1:24K:+1000K            -t1:EF02 "$selected_disk"
-    fi
-    sgdisk -n2:0:+2G                   -t2:BF01 "$selected_disk" # Boot pool
-    sgdisk -n3:0:"$tail_space_parameter" -t3:BF01 "$selected_disk" # Root pool
-  done
+EOF
+}
 
-  udevadm settle
+function configure_ssh {
+    echo "======= Setting up OpenSSH =========="
+    mkdir -p "$TARGET/root/.ssh/"
+    cp /root/.ssh/authorized_keys "$TARGET/root/.ssh/authorized_keys"
+    chmod 700 "$TARGET/root/.ssh"
+    chmod 600 "$TARGET/root/.ssh/authorized_keys"
+    sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' "$TARGET/etc/ssh/sshd_config"
+    sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/g' "$TARGET/etc/ssh/sshd_config"
 
-echo "======= create zfs pools and datasets =========="
+    chroot "$TARGET" /bin/bash <<'EOF'
+set -euo pipefail
+rm -f /etc/ssh/ssh_host_*
+dpkg-reconfigure openssh-server -f noninteractive
+EOF
+}
 
-  encryption_options=()
-  rpool_disks_partitions=()
-  bpool_disks_partitions=()
+function set_root_credentials {
+    echo "======= Setting root password =========="
+    printf 'root:%s\n' "$ROOT_PASSWORD" | chroot "$TARGET" chpasswd
 
-  if [[ $v_encrypt_rpool == "1" ]]; then
-    encryption_options=(-O "encryption=aes-256-gcm" -O "keylocation=prompt" -O "keyformat=passphrase")
-  fi
-
-  for selected_disk in "${v_selected_disks[@]}"; do
-    rpool_disks_partitions+=("${selected_disk}-part3")
-    bpool_disks_partitions+=("${selected_disk}-part2")
-  done
-
-  pools_mirror_option=
-  if [[ ${#v_selected_disks[@]} -gt 1 ]]; then
-    if dialog --defaultno --yesno "Do you want to use mirror mode for ${v_selected_disks[*]}?" 30 100; then 
-      pools_mirror_option=mirror
-    fi
-  fi
-
-# shellcheck disable=SC2086
-zpool create \
-  -m none \
-  $v_bpool_tweaks \
-  -o cachefile=/etc/zpool.cache \
-  -o compatibility=grub2 \
-  -O mountpoint=/boot -R $c_zfs_mount_dir -f \
-  $v_bpool_name $pools_mirror_option "${bpool_disks_partitions[@]}"
-
-# shellcheck disable=SC2086
-echo -n "$v_passphrase" | zpool create \
-  -m none \
-  $v_rpool_tweaks \
-  -o cachefile=/etc/zpool.cache \
-  "${encryption_options[@]}" \
-  -O mountpoint=/ -R $c_zfs_mount_dir -f \
-  $v_rpool_name $pools_mirror_option "${rpool_disks_partitions[@]}"
-
-zfs create -o canmount=off -o mountpoint=none "$v_rpool_name/ROOT"
-zfs create -o canmount=off -o mountpoint=none "$v_bpool_name/BOOT"
-
-zfs create -o canmount=noauto -o mountpoint=/ "$v_rpool_name/ROOT/debian"
-zfs mount "$v_rpool_name/ROOT/debian"
-
-zfs create -o canmount=noauto -o mountpoint=/boot "$v_bpool_name/BOOT/debian"
-zfs mount "$v_bpool_name/BOOT/debian"
-
-zfs create                                 "$v_rpool_name/home"
-#zfs create -o mountpoint=/root             "$v_rpool_name/home/root"
-zfs create -o canmount=off                 "$v_rpool_name/var"
-zfs create                                 "$v_rpool_name/var/log"
-zfs create                                 "$v_rpool_name/var/spool"
-
-zfs create -o com.sun:auto-snapshot=false  "$v_rpool_name/var/cache"
-zfs create -o com.sun:auto-snapshot=false  "$v_rpool_name/var/tmp"
-chmod 1777 "$c_zfs_mount_dir/var/tmp"
-
-zfs create                                 "$v_rpool_name/srv"
-
-zfs create -o canmount=off                 "$v_rpool_name/usr"
-zfs create                                 "$v_rpool_name/usr/local"
-
-zfs create                                 "$v_rpool_name/var/mail"
-
-zfs create -o com.sun:auto-snapshot=false -o canmount=on -o mountpoint=/tmp "$v_rpool_name/tmp"
-chmod 1777 "$c_zfs_mount_dir/tmp"
-
-if [[ $v_swap_size -gt 0 ]]; then
-  zfs create \
-    -V "${v_swap_size}G" -b "$(getconf PAGESIZE)" \
-    -o compression=zle -o logbias=throughput -o sync=always -o primarycache=metadata -o secondarycache=none -o com.sun:auto-snapshot=false \
-    "$v_rpool_name/swap"
-
-  udevadm settle
-
-  mkswap -f "/dev/zvol/$v_rpool_name/swap"
-fi
-
-if (( c_efimode_enabled == 1 )); then
-echo "======= create filesystem on EFI partition(s) =========="
-
-  for selected_disk in "${v_selected_disks[@]}"; do
-    mkfs.fat -F32 "${selected_disk}-part1"
-  done
-  mkdir -p "$c_zfs_mount_dir/boot/efi"
-  mount "${v_selected_disks[0]}-part1" "$c_zfs_mount_dir/boot/efi"
-fi
-
-echo "======= setting up initial system packages =========="
-debootstrap --arch=amd64 bookworm "$c_zfs_mount_dir" "$c_deb_packages_repo"
-
-zfs set devices=off "$v_rpool_name"
-
-echo "======= setting up the network =========="
-
-echo "$v_hostname" > $c_zfs_mount_dir/etc/hostname
-
-cat > "$c_zfs_mount_dir/etc/hosts" <<CONF
-127.0.1.1 ${v_hostname}
-127.0.0.1 localhost
-
-# The following lines are desirable for IPv6 capable hosts
-::1 ip6-localhost ip6-loopback
-fe00::0 ip6-localnet
-ff00::0 ip6-mcastprefix
-ff02::1 ip6-allnodes
-ff02::2 ip6-allrouters
-ff02::3 ip6-allhosts
-CONF
-
-ip6addr_prefix=$(ip -6 a s | grep -E "inet6.+global" | sed -nE 's/.+inet6\s(([0-9a-z]{1,4}:){4,4}).+/\1/p' | head -n 1)
-
-cat <<CONF > "$c_zfs_mount_dir/etc/systemd/network/10-eth0.network"
-[Match]
-Name=eth0
-
-[Network]
-DHCP=ipv4
-Address=${ip6addr_prefix}:1/64
-Gateway=fe80::1
-CONF
-chroot_execute "systemctl enable systemd-networkd.service"
-
-echo "======= preparing the jail for chroot =========="
-for virtual_fs_dir in proc sys dev; do
-  mount --rbind "/$virtual_fs_dir" "$c_zfs_mount_dir/$virtual_fs_dir"
-done
-
-echo "======= setting apt repos =========="
-cat > "$c_zfs_mount_dir/etc/apt/sources.list" <<CONF
-deb $c_deb_packages_repo bookworm main contrib non-free non-free-firmware
-deb $c_deb_packages_repo bookworm-updates main contrib non-free non-free-firmware
-deb $c_deb_security_repo bookworm-security main contrib non-free non-free-firmware
-deb $c_deb_packages_repo bookworm-backports main contrib non-free non-free-firmware
-CONF
-
-chroot_execute "apt update"
-
-echo "======= setting locale, console and language =========="
-chroot_execute "apt install --yes -qq locales debconf-i18n apt-utils"
-sed -i 's/# en_US.UTF-8/en_US.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
-sed -i 's/# fr_FR.UTF-8/fr_FR.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
-sed -i 's/# fr_FR.UTF-8/fr_FR.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
-sed -i 's/# de_AT.UTF-8/de_AT.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
-sed -i 's/# de_DE.UTF-8/de_DE.UTF-8/' "$c_zfs_mount_dir/etc/locale.gen"
-
-chroot_execute 'cat <<CONF | debconf-set-selections
-locales locales/default_environment_locale      select  en_US.UTF-8
-keyboard-configuration  keyboard-configuration/store_defaults_in_debconf_db     boolean true
-keyboard-configuration  keyboard-configuration/variant  select  German
-keyboard-configuration  keyboard-configuration/unsupported_layout       boolean true
-keyboard-configuration  keyboard-configuration/modelcode        string  pc105
-keyboard-configuration  keyboard-configuration/unsupported_config_layout        boolean true
-keyboard-configuration  keyboard-configuration/layout   select  German
-keyboard-configuration  keyboard-configuration/layoutcode       string  de
-keyboard-configuration  keyboard-configuration/optionscode      string
-keyboard-configuration  keyboard-configuration/toggle   select  No toggling
-keyboard-configuration  keyboard-configuration/xkb-keymap       select  de
-keyboard-configuration  keyboard-configuration/switch   select  No temporary switch
-keyboard-configuration  keyboard-configuration/unsupported_config_options       boolean true
-keyboard-configuration  keyboard-configuration/ctrl_alt_bksp    boolean false
-keyboard-configuration  keyboard-configuration/variantcode      string
-keyboard-configuration  keyboard-configuration/model    select  Generic 105-key PC (intl.)
-keyboard-configuration  keyboard-configuration/altgr    select  The default for the keyboard layout
-keyboard-configuration  keyboard-configuration/compose  select  No compose key
-keyboard-configuration  keyboard-configuration/unsupported_options      boolean true
-console-setup   console-setup/fontsize-fb47     select  8x16
-console-setup   console-setup/store_defaults_in_debconf_db      boolean true
-console-setup   console-setup/codeset47 select  # Latin1 and Latin5 - western Europe and Turkic languages
-console-setup   console-setup/fontface47        select  Fixed
-console-setup   console-setup/fontsize  string  8x16
-console-setup   console-setup/charmap47 select  UTF-8
-console-setup   console-setup/fontsize-text47   select  8x16
-console-setup   console-setup/codesetcode       string  Lat15
-tzdata tzdata/Areas select Europe
-tzdata tzdata/Zones/Europe select Vienna
-CONF'
-
-chroot_execute "dpkg-reconfigure locales -f noninteractive"
-echo -e "LC_ALL=en_US.UTF-8\nLANG=en_US.UTF-8\n" >> "$c_zfs_mount_dir/etc/environment"
-chroot_execute "apt install -qq --yes keyboard-configuration console-setup"
-chroot_execute "dpkg-reconfigure keyboard-configuration -f noninteractive"
-chroot_execute "dpkg-reconfigure console-setup -f noninteractive"
-chroot_execute "setupcon"
-
-chroot_execute "rm -f /etc/localtime /etc/timezone"
-chroot_execute "dpkg-reconfigure tzdata -f noninteractive"
-
-echo "======= installing latest kernel============="
-# linux-headers-generic linux-image-generic
-chroot_execute "apt install --yes linux-image${v_kernel_variant}-amd64 linux-headers${v_kernel_variant}-amd64 dpkg-dev"
-
-echo "======= installing aux packages =========="
-chroot_execute "apt install --yes man wget curl software-properties-common nano htop gnupg"
-
-echo "======= installing zfs packages =========="
-chroot_execute 'echo "zfs-dkms zfs-dkms/note-incompatible-licenses note true" | debconf-set-selections'
-
-if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "wget -O - https://terem42.github.io/zfs-debian/apt_pub.gpg | apt-key add -"
-  chroot_execute "add-apt-repository 'deb https://terem42.github.io/zfs-debian/public zfs-debian-experimental main'"
-  chroot_execute "apt update"
-  chroot_execute "apt install -t zfs-debian-experimental --yes zfs-initramfs zfs-dkms zfsutils-linux"
-else
-  chroot_execute "apt install -t bookworm-backports --yes zfs-initramfs zfs-dkms zfsutils-linux"
-fi
-chroot_execute 'cat << DKMS > /etc/dkms/zfs.conf
-# override for /usr/src/zfs-*/dkms.conf:
-# always rebuild initrd when zfs module has been changed
-# (either by a ZFS update or a new kernel version)
-REMAKE_INITRD="yes"
-DKMS'
-
-echo "======= installing OpenSSH and network tooling =========="
-chroot_execute "apt install --yes openssh-server net-tools"
-
-echo "======= setup OpenSSH  =========="
-sed -i 's/#PasswordAuthentication yes/PasswordAuthentication no/g' "$c_zfs_mount_dir/etc/ssh/sshd_config"
-sed -i 's/#PubkeyAuthentication yes/PubkeyAuthentication yes/g' "$c_zfs_mount_dir/etc/ssh/sshd_config"
-chroot_execute "rm /etc/ssh/ssh_host_*"
-chroot_execute "dpkg-reconfigure openssh-server -f noninteractive"
-
-echo "======= set root password =========="
-chroot_execute "echo root:$(printf "%q" "$v_root_password") | chpasswd"
-
-echo "======= setting up zfs cache =========="
-
-cp /etc/zpool.cache "$c_zfs_mount_dir/etc/zfs/zpool.cache"
-
-echo "========setting up zfs module parameters========"
-chroot_execute "echo options zfs zfs_arc_max=$((v_zfs_arc_max_mb * 1024 * 1024)) >> /etc/modprobe.d/zfs.conf"
-
-echo "======= setting up grub =========="
-if (( c_efimode_enabled == 1 )); then
-  chroot_execute "apt install --yes grub-efi-amd64"
-else
-  chroot_execute "echo 'grub-pc grub-pc/install_devices_empty   boolean true' | debconf-set-selections"
-  chroot_execute "apt install --yes grub-legacy"
-  chroot_execute "apt install --yes grub-pc"
-fi
-
-if (( c_efimode_enabled == 1 )); then
-  #chroot_execute grub-probe /boot
-  chroot_execute grub-install --target=x86_64-efi --efi-directory=/boot/efi --bootloader-id=debian --recheck
-else
-  for disk in "${v_selected_disks[@]}"; do
-    chroot_execute "grub-install --recheck $disk"
-  done
-fi
-
-chroot_execute "sed -i 's/#GRUB_TERMINAL=console/GRUB_TERMINAL=console/g' /etc/default/grub"
-chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX_DEFAULT=.*|GRUB_CMDLINE_LINUX_DEFAULT=\"net.ifnames=0\"|' /etc/default/grub"
-chroot_execute "sed -i 's|GRUB_CMDLINE_LINUX=\"\"|GRUB_CMDLINE_LINUX=\"root=ZFS=$v_rpool_name/ROOT/debian\"|g' /etc/default/grub"
-
-chroot_execute "sed -i 's/quiet//g' /etc/default/grub"
-chroot_execute "sed -i 's/splash//g' /etc/default/grub"
-chroot_execute "echo 'GRUB_DISABLE_OS_PROBER=true'   >> /etc/default/grub"
-
-for ((i = 1; i < ${#v_selected_disks[@]}; i++)); do
-  dd if="${v_selected_disks[0]}-part1" of="${v_selected_disks[i]}-part1"
-done
-
-if [[ $v_encrypt_rpool == "1" ]]; then
-  echo "=========set up dropbear=============="
-
-  chroot_execute "apt install --yes dropbear-initramfs"
-  
-  mkdir -p "$c_zfs_mount_dir/etc/dropbear/initramfs"
-  cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/etc/dropbear/initramfs/authorized_keys"
-
-  cp "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key" "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key_temp"
-  chroot_execute "ssh-keygen -p -i -m pem -N '' -f /etc/ssh/ssh_host_rsa_key_temp"
-  chroot_execute "/usr/lib/dropbear/dropbearconvert openssh dropbear /etc/ssh/ssh_host_rsa_key_temp /etc/dropbear/initramfs/dropbear_rsa_host_key"
-  rm -rf "$c_zfs_mount_dir/etc/ssh/ssh_host_rsa_key_temp"
-
-  cp "$c_zfs_mount_dir/etc/ssh/ssh_host_ecdsa_key" "$c_zfs_mount_dir/etc/ssh/ssh_host_ecdsa_key_temp"
-  chroot_execute "ssh-keygen -p -i -m pem -N '' -f /etc/ssh/ssh_host_ecdsa_key_temp"
-  chroot_execute "/usr/lib/dropbear/dropbearconvert openssh dropbear /etc/ssh/ssh_host_ecdsa_key_temp /etc/dropbear/initramfs/dropbear_ecdsa_host_key"
-  chroot_execute "rm -rf /etc/ssh/ssh_host_ecdsa_key_temp"
-  rm -rf "$c_zfs_mount_dir/etc/ssh/ssh_host_ecdsa_key_temp"
-
-  rm -rf "$c_zfs_mount_dir/etc/dropbear/initramfs/dropbear_dss_host_key"
-fi
-
-echo "============setup root prompt============"
-cat > "$c_zfs_mount_dir/root/.bashrc" <<CONF
+    echo "============ Setting up root prompt ============"
+    cat > "$TARGET/root/.bashrc" <<CONF
 export PS1='\[\033[01;31m\]\u\[\033[01;33m\]@\[\033[01;32m\]\h \[\033[01;33m\]\w \[\033[01;35m\]\$ \[\033[00m\]'
 umask 022
 export LS_OPTIONS='--color=auto -h'
 eval "\$(dircolors)"
 CONF
-
-echo "========= add root pubkey for login via SSH"
-mkdir -p "$c_zfs_mount_dir/root/.ssh/"
-cp /root/.ssh/authorized_keys "$c_zfs_mount_dir/root/.ssh/authorized_keys"
-
-echo "========running packages upgrade and autoremove==========="
-chroot_execute "apt upgrade --yes"
-chroot_execute "apt purge cryptsetup* --yes"
-
-echo "===========add static route to initramfs via hook to add default routes for Hetzner due to Debian/Ubuntu initramfs DHCP bug ========="
-mkdir -p "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount"
-cat > "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount/static-route" <<'CONF'
-#!/bin/sh
-PREREQ=""
-prereqs()
-{
-    echo "$PREREQ"
 }
 
-case $1 in
-prereqs)
-    prereqs
-    exit 0
-    ;;
-esac
+# ---- Bootloader Functions ----
+function setup_efi_boot {
+    echo "======= Setting up EFI boot =========="
 
-. /scripts/functions
-# Begin real processing below this line
+    # Mount EFI System Partition
+    mkdir -p "$MAIN_BOOT"
+    mount "$BOOT_PART" "$MAIN_BOOT"
 
-configure_networking
+    # Create EFI directory structure
+    mkdir -p "$MAIN_BOOT/EFI/Boot"
 
-ip route add 172.31.1.1/255.255.255.255 dev eth0
-ip route add default via 172.31.1.1 dev eth0
-CONF
+    # Download ZFSBootMenu EFI binary
+    echo "Downloading ZFSBootMenu EFI binary from: $ZBM_EFI_URL"
+    curl -fSL --retry 3 --retry-delay 5 "$ZBM_EFI_URL" -o "$MAIN_BOOT/EFI/Boot/bootx64.efi"
 
-chmod 755 "$c_zfs_mount_dir/usr/share/initramfs-tools/scripts/init-premount/static-route"
+    # Reference the ESP in fstab (not auto-mounted; mount manually to update ZBM)
+    mkdir -p "$TARGET/boot/efi"
+    echo "PARTLABEL=${BOOT_LABEL} /boot/efi vfat noauto,umask=0077 0 0" >> "$TARGET/etc/fstab"
+}
 
-chmod 755 "$c_zfs_mount_dir/etc/network/interfaces"
+function setup_bios_boot {
+    echo "======= Setting up BIOS boot =========="
 
-echo "======= update initramfs =========="
-chroot_execute "update-initramfs -u -k all"
+    # Mount boot partition
+    mkdir -p "$MAIN_BOOT"
+    mount "$BOOT_PART" "$MAIN_BOOT"
 
-chroot_execute "apt remove cryptsetup* --yes"
+    # Install extlinux in rescue system if needed
+    if ! command -v extlinux &> /dev/null; then
+        echo "Installing extlinux in rescue system..."
+        apt update
+        apt install -y extlinux
+    fi
 
-echo "======= update grub =========="
-chroot_execute "update-grub"
+    # Install extlinux
+    extlinux --install "$MAIN_BOOT"
 
-echo "======= setting up zed =========="
-if [[ $v_zfs_experimental == "1" ]]; then
-  chroot_execute "zfs set canmount=noauto $v_rpool_name"
-else
-  initial_load_debian_zed_cache
-fi
+    # Create extlinux configuration
+    cat > "$MAIN_BOOT/extlinux.conf" << 'EOF'
+DEFAULT zfsbootmenu
+PROMPT 0
+TIMEOUT 0
 
-echo "======= setting mountpoints =========="
-if (( c_efimode_enabled == 1 )); then
-  umount "$c_zfs_mount_dir/boot/efi"
-fi
+LABEL zfsbootmenu
+    LINUX /zfsbootmenu/vmlinuz-bootmenu
+    INITRD /zfsbootmenu/initramfs-bootmenu.img
+    APPEND ro quiet
+EOF
 
-chroot_execute "zfs set mountpoint=legacy $v_bpool_name/BOOT/debian"
-chroot_execute "echo $v_bpool_name/BOOT/debian /boot zfs nodev,relatime,x-systemd.requires=zfs-mount.service,x-systemd.device-timeout=10 0 0 > /etc/fstab"
+    echo "Generated extlinux.conf:"
+    cat "$MAIN_BOOT/extlinux.conf"
 
-chroot_execute "zfs set mountpoint=legacy $v_rpool_name/var/log"
-chroot_execute "echo $v_rpool_name/var/log /var/log zfs nodev,relatime 0 0 >> /etc/fstab"
-chroot_execute "zfs set mountpoint=legacy $v_rpool_name/var/spool"
-chroot_execute "echo $v_rpool_name/var/spool /var/spool zfs nodev,relatime 0 0 >> /etc/fstab"
-chroot_execute "zfs set mountpoint=legacy $v_rpool_name/var/tmp"
-chroot_execute "echo $v_rpool_name/var/tmp /var/tmp zfs nodev,relatime 0 0 >> /etc/fstab"
-chroot_execute "zfs set mountpoint=legacy $v_rpool_name/tmp"
-chroot_execute "echo $v_rpool_name/tmp /tmp zfs nodev,relatime 0 0 >> /etc/fstab"
+    # Download and install ZFSBootMenu for BIOS
+    local TEMP_ZBM
+    TEMP_ZBM=$(mktemp -d)
+    echo "Downloading ZFSBootMenu for BIOS from: $ZBM_BIOS_URL"
+    curl -fSL --retry 3 --retry-delay 5 "$ZBM_BIOS_URL" -o "$TEMP_ZBM/zbm.tar.gz"
+    tar -xz -C "$TEMP_ZBM" -f "$TEMP_ZBM/zbm.tar.gz" --strip-components=1
 
-echo "========= add swap, if defined"
-if [[ $v_swap_size -gt 0 ]]; then
-  chroot_execute "echo /dev/zvol/$v_rpool_name/swap none swap discard 0 0 >> /etc/fstab"
-fi
+    # Copy ZFSBootMenu to boot partition
+    mkdir -p "$MAIN_BOOT/zfsbootmenu"
+    cp "$TEMP_ZBM"/vmlinuz* "$MAIN_BOOT/zfsbootmenu/"
+    cp "$TEMP_ZBM"/initramfs* "$MAIN_BOOT/zfsbootmenu/"
 
-chroot_execute "echo RESUME=none > /etc/initramfs-tools/conf.d/resume"
+    # Clean up
+    rm -rf "$TEMP_ZBM"
 
-echo "======= unmounting filesystems and zfs pools =========="
-unmount_and_export_fs
+    echo "ZFSBootMenu files copied to boot partition:"
+    ls -la "$MAIN_BOOT/zfsbootmenu/"
 
-echo "======== setup complete, rebooting ==============="
-reboot
+    # Install GPT-aware MBR boot code; it chain-loads the partition carrying the
+    # legacy BIOS bootable attribute set by sgdisk in partition_disk
+    local gptmbr="/usr/lib/EXTLINUX/gptmbr.bin"
+    if [ ! -f "$gptmbr" ]; then
+        echo "ERROR: $gptmbr not found (extlinux package missing?)" >&2
+        exit 1
+    fi
+    dd bs=440 conv=notrunc count=1 if="$gptmbr" of="$INSTALL_DISK"
+
+    # Reference the boot partition in fstab (not auto-mounted; mount manually to update ZBM)
+    mkdir -p "$TARGET/boot/syslinux"
+    echo "LABEL=${BOOT_LABEL} /boot/syslinux ext4 noauto,defaults 0 2" >> "$TARGET/etc/fstab"
+
+    echo "BIOS boot setup complete"
+}
+
+function configure_bootloader {
+    echo "======= Setting up boot based on firmware type =========="
+    if [ "$EFI_MODE" = true ]; then
+        setup_efi_boot
+    else
+        setup_bios_boot
+    fi
+
+    echo "======= Configuring ZFSBootMenu for auto-detection =========="
+    zfs set org.zfsbootmenu:commandline="ro quiet" "$ZFS_POOL/ROOT/debian"
+
+    echo "Boot configuration:"
+    zfs get org.zfsbootmenu:commandline "$ZFS_POOL/ROOT/debian"
+}
+
+# ---- System Services Functions ----
+function configure_system_services {
+    echo "======= Configuring ZFS cachefile in chrooted system =========="
+    mkdir -p "$TARGET/etc/zfs"
+    cp /etc/zfs/zpool.cache "$TARGET/etc/zfs/zpool.cache"
+
+    echo "Cachefile status:"
+    zpool get cachefile "$ZFS_POOL"
+    ls -la "$TARGET/etc/zfs/zpool.cache" && echo "✓ Cachefile ready" || echo "✗ Cachefile failed"
+
+    echo "======= Enabling essential system services =========="
+    chroot "$TARGET" /bin/bash <<'EOF'
+set -euo pipefail
+
+systemctl enable systemd-resolved
+systemctl enable systemd-timesyncd
+systemctl enable systemd-networkd
+
+systemctl enable zfs-import-cache
+systemctl enable zfs-mount
+
+systemctl enable ssh
+systemctl enable apt-daily.timer
+
+echo "Enabled services:"
+systemctl list-unit-files | grep enabled || true
+EOF
+}
+
+function configure_networking {
+    echo "======= Configuring systemd-networkd for Hetzner Cloud =========="
+
+    # Create systemd-networkd configuration for all ethernet interfaces
+    mkdir -p "$TARGET/etc/systemd/network"
+
+    cat > "$TARGET/etc/systemd/network/10-hetzner.network" <<'EOF'
+[Match]
+Name=ens* enp* eth*
+
+[Network]
+DHCP=yes
+IPv6PrivacyExtensions=yes
+
+[DHCP]
+RouteMetric=100
+UseDNS=yes
+UseDomains=yes
+
+[DHCPv4]
+RouteMetric=100
+UseDNS=yes
+UseDomains=yes
+
+[IPv6AcceptRA]
+RouteMetric=100
+EOF
+
+    echo "systemd-networkd configuration:"
+    cat "$TARGET/etc/systemd/network/10-hetzner.network"
+    echo ""
+}
+
+# ---- Cleanup and Finalization Functions ----
+function restore_target_resolv_conf {
+    echo "======= Restoring systemd-resolved resolv.conf symlink =========="
+    rm -f "$TARGET/etc/resolv.conf"
+    ln -s ../run/systemd/resolve/stub-resolv.conf "$TARGET/etc/resolv.conf"
+}
+
+function unmount_chroot_environment {
+    echo "======= Unmounting virtual filesystems =========="
+    # Unmount virtual filesystems first
+    for dir in dev/pts dev tmp run/lock run/shm sys proc; do
+        if mountpoint -q "$TARGET/$dir"; then
+            echo "Unmounting $TARGET/$dir"
+            umount "$TARGET/$dir" 2>/dev/null || true
+        fi
+    done
+}
+
+function unmount_all_datasets_and_partitions {
+    echo "======= Unmounting all datasets =========="
+
+    # First, unmount any virtual filesystems still using the datasets
+    echo "Unmounting virtual filesystems..."
+    for dir in dev/pts dev tmp run/lock run/shm run sys proc; do
+        if mountpoint -q "$TARGET/$dir"; then
+            echo "Unmounting $TARGET/$dir"
+            umount "$TARGET/$dir" 2>/dev/null || true
+        fi
+    done
+
+    # Give it a moment
+    sleep 2
+
+    # Try to unmount boot partition first
+    if mountpoint -q "$MAIN_BOOT"; then
+        echo "Unmounting boot partition from $MAIN_BOOT"
+        umount "$MAIN_BOOT" 2>/dev/null || true
+    fi
+
+    # Unmount ZFS datasets
+    echo "Unmounting ZFS datasets..."
+    zfs umount -a 2>/dev/null || true
+
+    # Wait for unmounts to complete
+    sleep 2
+
+    # The root dataset has a legacy mountpoint, so unmount it explicitly
+    if mountpoint -q "$TARGET"; then
+        umount "$TARGET" 2>/dev/null || {
+            echo "Attempting lazy unmount of $TARGET"
+            umount -l "$TARGET" 2>/dev/null || true
+        }
+    fi
+
+    # Force unmount any stubborn ZFS datasets
+    if zfs get mounted -r "$ZFS_POOL" 2>/dev/null | grep -q "yes"; then
+        echo "Forcing unmount of remaining ZFS datasets..."
+        zfs umount -a -f 2>/dev/null || true
+    fi
+
+    # Final verification and force unmount if still mounted
+    if mountpoint -q "$TARGET"; then
+        echo "WARNING: $TARGET is still mounted! Attempting final cleanup..."
+        # Use fuser to find what's using the mount
+        if command -v fuser &> /dev/null; then
+            fuser -mv "$TARGET" 2>/dev/null || true
+        fi
+        # Force lazy unmount as last resort
+        umount -l "$TARGET" 2>/dev/null || true
+    fi
+
+    # Final ZFS unmount check
+    local mounted_count=0
+    mounted_count=$(zfs get mounted -r "$ZFS_POOL" 2>/dev/null | grep -c "yes" || true)
+
+    if [ "$mounted_count" -gt 0 ]; then
+        echo "WARNING: $mounted_count dataset(s) still mounted:"
+        zfs get mounted -r "$ZFS_POOL" 2>/dev/null | grep "yes" || true
+    else
+        echo "✓ All ZFS datasets successfully unmounted"
+    fi
+
+    # Verify $TARGET is unmounted
+    if mountpoint -q "$TARGET"; then
+        echo "WARNING: $TARGET is still mounted but continuing..."
+    else
+        echo "✓ $TARGET successfully unmounted"
+    fi
+
+    # Verify $MAIN_BOOT is unmounted
+    if mountpoint -q "$MAIN_BOOT"; then
+        echo "WARNING: $MAIN_BOOT is still mounted!"
+    else
+        echo "✓ $MAIN_BOOT successfully unmounted"
+    fi
+}
+
+function export_zfs_pool {
+    echo "======= Exporting ZFS pool =========="
+    # Export the pool to ensure clean state
+    if ! zpool export "$ZFS_POOL"; then
+        echo "Plain export failed, retrying with force..."
+        sleep 2
+        zpool export -f "$ZFS_POOL"
+    fi
+    echo "✓ ZFS pool '$ZFS_POOL' exported successfully"
+}
+
+function show_final_instructions {
+    echo ""
+    echo "=========================================="
+    echo "  INSTALLATION COMPLETE! "
+    echo "=========================================="
+    echo ""
+    echo "System Information:"
+    echo "  Hostname: $SYSTEM_HOSTNAME"
+    echo "  ZFS Pool: $ZFS_POOL"
+    echo "  ZFS ARC max: $ZFS_ARC_MAX_MB MiB"
+    echo "  Boot Mode: $([ "$EFI_MODE" = true ] && echo "EFI" || echo "BIOS")"
+    echo "  Debian Version: $DEBIAN_CODENAME"
+    echo "  Networking: systemd-networkd + systemd-resolved"
+    if [ "$ZFS_ENCRYPT" = true ]; then
+        echo "  Encryption: enabled (aes-256-gcm)"
+        echo ""
+        echo "IMPORTANT: at every boot, open the server console in the"
+        echo "Hetzner UI and enter the pool passphrase at the ZFSBootMenu"
+        echo "prompt. Remote SSH unlock requires a custom-built ZFSBootMenu"
+        echo "image with dropbear and is not part of this setup."
+    fi
+    echo ""
+    echo "=========================================="
+    echo "Rebooting..."
+}
+
+# ---- Main Installation Flow ----
+function main {
+    echo "Starting ZFS Debian 12 installation on Hetzner..."
+
+    check_prerequisites
+
+    # Get user input first
+    get_user_input
+
+    # System detection
+    detect_efi
+    find_install_disk
+
+    # Show summary and get confirmation
+    show_summary_and_confirm
+
+    # Rescue system preparation
+    remove_unused_kernels
+    install_zfs_on_rescue_system
+
+    # Disk partitioning
+    partition_disk
+
+    # ZFS setup
+    create_zfs_pool
+
+    # System installation
+    bootstrap_debian_system
+    stage_encryption_key
+    configure_zfs_arc
+    setup_chroot_environment
+    configure_basic_system
+    install_system_packages
+
+    verify_initramfs
+    configure_ssh
+    set_root_credentials
+
+    # System configuration
+    configure_system_services
+    configure_networking
+
+    # Bootloader configuration
+    configure_bootloader
+
+    # Finalization
+    restore_target_resolv_conf
+    unmount_chroot_environment
+    unmount_all_datasets_and_partitions
+    export_zfs_pool
+
+    # Completion
+    show_final_instructions
+
+    reboot
+}
+
+# Run main function
+main
